@@ -96,52 +96,6 @@
       #bubble-canvas { height: 360px; }
     }
 
-    /* ── Terminal ───────────────────────────────────────────────────────────── */
-    #terminal {
-      flex: 1;
-      min-width: 0;
-      border: 1.5px solid #000;
-      padding: 20px 24px;
-    }
-
-    #terminal-title {
-      display: block;
-      font-size: 13px;
-      font-weight: 700;
-      color: #000;
-      margin-bottom: 10px;
-    }
-
-    #output {
-      font-family: 'SF Mono', ui-monospace, 'Fira Code', 'Courier New', monospace;
-      font-size: 12px;
-      line-height: 1.75;
-      color: #000;
-      white-space: pre;
-      overflow-x: auto;
-      max-height: 540px;
-      overflow-y: auto;
-    }
-
-    #output .muted { color: #aaa; }
-
-    #show-all {
-      display: none;
-      margin-top: 12px;
-      padding: 6px 0;
-      width: 100%;
-      background: transparent;
-      border: 1px solid #000;
-      font-family: inherit;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      color: #000;
-    }
-    #show-all:hover { background: #f5f5f5; }
-
     /* ── Bubble map ─────────────────────────────────────────────────────────── */
     #bubble-wrap {
       flex: 1;
@@ -294,12 +248,6 @@
   </div>
 
   <div id="panels">
-    <div id="terminal">
-      <span id="terminal-title">Terminal</span>
-      <pre id="output"><span class="muted">Waiting for input...</span></pre>
-      <button id="show-all">Show All</button>
-    </div>
-
     <div id="bubble-wrap">
       <span id="bubble-label">Bubble Map</span>
       <span id="bubble-wallet"></span>
@@ -314,29 +262,9 @@
 
 
   <script>
-    const DEFAULT   = 'FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP';
-    const input     = document.getElementById('wallet');
-    const output    = document.getElementById('output');
-    const enterBtn  = document.getElementById('enter');
-    const showAllBtn = document.getElementById('show-all');
-
-    let shortContent = '';
-
-    showAllBtn.addEventListener('click', () => {
-      if (showAllBtn.textContent === 'Show All') {
-        shortContent = output.textContent;
-        fetch('/more_transactions')
-          .then(r => r.text())
-          .then(text => {
-            output.textContent += text;
-            showAllBtn.textContent = 'Show Less';
-          })
-          .catch(() => { output.textContent += '\nFailed to load remaining transactions.'; });
-      } else {
-        output.textContent = shortContent;
-        showAllBtn.textContent = 'Show All';
-      }
-    });
+    const DEFAULT  = 'FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP';
+    const input    = document.getElementById('wallet');
+    const enterBtn = document.getElementById('enter');
 
     // ── Input behaviour ──────────────────────────────────────────────────────
     input.addEventListener('focus', () => {
@@ -369,10 +297,8 @@
 
       if (activeSource) { activeSource.close(); activeSource = null; }
 
-      output.textContent = '';
       enterBtn.disabled  = true;
       enterBtn.textContent = 'Running...';
-      showAllBtn.style.display = 'none';
 
       // Reset summary bar
       document.getElementById('summary-bar').classList.remove('visible');
@@ -400,13 +326,10 @@
           activeSource       = null;
           enterBtn.disabled  = false;
           enterBtn.textContent = 'Enter';
-          showAllBtn.style.display = 'block';
           fetchHoldings(addr);
           fetchSummary();
           return;
         }
-        output.textContent += e.data + '\n';
-        output.scrollTop    = output.scrollHeight;
       };
 
       es.onerror = () => {
@@ -414,7 +337,6 @@
         activeSource         = null;
         enterBtn.disabled    = false;
         enterBtn.textContent = 'Enter';
-        output.textContent  += '\nConnection lost.';
       };
     }
     // ── Bubble chart ─────────────────────────────────────────────────────────

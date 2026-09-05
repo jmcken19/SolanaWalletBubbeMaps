@@ -1,11 +1,10 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import urllib.request
-import subprocess
-import sys
-import io
 import os
 import json
+import datetime
+import collections
 
 MINT_TO_SYMBOL = {
     "So11111111111111111111111111111111111111112":  "SOL",
@@ -24,6 +23,9 @@ MINT_TO_SYMBOL = {
     "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgTL":  "SAMO",
 }
 
+# In-memory cache — replaced on each /run call
+_cache = {"rows": [], "wallet": ""}
+
 
 class Handler(BaseHTTPRequestHandler):
 
@@ -38,8 +40,6 @@ class Handler(BaseHTTPRequestHandler):
             self._stream_run(wallet)
         elif parsed.path == "/tokens":
             self._get_tokens()
-        elif parsed.path == "/more_transactions":
-            self._get_more_transactions()
         elif parsed.path == "/token_detail":
             params = parse_qs(parsed.query)
             token = params.get("token", [""])[0].strip()
@@ -83,61 +83,41 @@ class Handler(BaseHTTPRequestHandler):
             self._send_event("[DONE]")
             return
 
-        env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
-
-        base = os.path.dirname(os.path.abspath(__file__))
-        proc = subprocess.Popen(
-            [sys.executable, "-u", os.path.join(base, "runner.py"), wallet],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            env=env,
-            cwd=base,
-        )
-
         try:
-            for line in proc.stdout:
-                self._send_event(line.rstrip())
-            proc.wait()
-        except (BrokenPipeError, OSError):
-            proc.terminate()
+            from helius import fetch_transactions
+            from parser import parse_transactions
+
+            raw = fetch_transactions(wallet)
+            rows = parse_transactions(raw)
+
+            _cache["rows"] = rows
+            _cache["wallet"] = wallet
+        except Exception as e:
+            self._send_event(f"Error: {e}")
         finally:
             self._send_event("[DONE]")
 
     def _get_tokens(self):
         try:
-            from db import get_connection
-            import psycopg2.extras
+            rows = _cache["rows"]
+            counter = collections.Counter()
+            amount_sums = collections.defaultdict(float)
 
-            conn = get_connection()
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT token, COUNT(*) AS count, SUM(amount) AS total_amount
-                    FROM (
-                        SELECT token_in  AS token, amount_in  AS amount
-                        FROM transactions
-                        WHERE type = 'SWAP' AND token_in  IS NOT NULL AND token_in  <> ''
-                        UNION ALL
-                        SELECT token_out AS token, amount_out AS amount
-                        FROM transactions
-                        WHERE type = 'SWAP' AND token_out IS NOT NULL AND token_out <> ''
-                    ) t
-                    GROUP BY token
-                    ORDER BY count DESC
-                    LIMIT 20
-                """)
-                rows = [
-                    {
-                        "token":        r["token"],
-                        "count":        int(r["count"]),
-                        "total_amount": float(r["total_amount"] or 0),
-                    }
-                    for r in cur.fetchall()
-                ]
-            conn.close()
+            for r in rows:
+                if r.get("type") == "SWAP":
+                    if r.get("token_in"):
+                        counter[r["token_in"]] += 1
+                        amount_sums[r["token_in"]] += r.get("amount_in", 0) or 0
+                    if r.get("token_out"):
+                        counter[r["token_out"]] += 1
+                        amount_sums[r["token_out"]] += r.get("amount_out", 0) or 0
 
-            data = json.dumps(rows).encode()
+            result = [
+                {"token": t, "count": c, "total_amount": amount_sums[t]}
+                for t, c in counter.most_common(20)
+            ]
+
+            data = json.dumps(result).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -154,47 +134,46 @@ class Handler(BaseHTTPRequestHandler):
 
     def _get_token_detail(self, token):
         try:
-            from db import get_connection
-            import psycopg2.extras
+            rows = _cache["rows"]
+            count_in = count_out = 0
+            total_in = total_out = 0.0
+            times = []
+            type_counter = collections.Counter()
 
-            conn = get_connection()
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT
-                        SUM(CASE WHEN direction = 'in'  THEN 1 ELSE 0 END)      AS count_in,
-                        SUM(CASE WHEN direction = 'out' THEN 1 ELSE 0 END)      AS count_out,
-                        SUM(CASE WHEN direction = 'in'  THEN amount ELSE 0 END) AS total_in,
-                        SUM(CASE WHEN direction = 'out' THEN amount ELSE 0 END) AS total_out,
-                        TO_TIMESTAMP(MIN(block_time))::TEXT                     AS first_seen,
-                        TO_TIMESTAMP(MAX(block_time))::TEXT                     AS last_seen
-                    FROM (
-                        SELECT token_in  AS token, amount_in  AS amount, 'in'  AS direction, block_time
-                        FROM transactions WHERE token_in  = %s
-                        UNION ALL
-                        SELECT token_out AS token, amount_out AS amount, 'out' AS direction, block_time
-                        FROM transactions WHERE token_out = %s
-                    ) t
-                """, (token, token))
-                stats = dict(cur.fetchone())
+            for r in rows:
+                txn_type = r.get("type", "")
+                matched = False
+                if r.get("token_in") == token:
+                    count_in += 1
+                    total_in += r.get("amount_in", 0) or 0
+                    matched = True
+                if r.get("token_out") == token:
+                    count_out += 1
+                    total_out += r.get("amount_out", 0) or 0
+                    matched = True
+                if matched:
+                    if r.get("block_time"):
+                        times.append(r["block_time"])
+                    type_counter[txn_type] += 1
 
-                cur.execute("""
-                    SELECT type, COUNT(*) AS count
-                    FROM transactions
-                    WHERE token_in = %s OR token_out = %s
-                    GROUP BY type ORDER BY count DESC
-                """, (token, token))
-                types = [{"type": r["type"], "count": int(r["count"])} for r in cur.fetchall()]
-
-            conn.close()
+            first_seen = (
+                datetime.datetime.utcfromtimestamp(min(times)).strftime("%Y-%m-%d %H:%M:%S")
+                if times else ""
+            )
+            last_seen = (
+                datetime.datetime.utcfromtimestamp(max(times)).strftime("%Y-%m-%d %H:%M:%S")
+                if times else ""
+            )
+            types = [{"type": t, "count": c} for t, c in type_counter.most_common()]
 
             result = {
                 "token":      token,
-                "count_in":   int(stats["count_in"]   or 0),
-                "count_out":  int(stats["count_out"]  or 0),
-                "total_in":   float(stats["total_in"]  or 0),
-                "total_out":  float(stats["total_out"] or 0),
-                "first_seen": str(stats["first_seen"]  or ""),
-                "last_seen":  str(stats["last_seen"]   or ""),
+                "count_in":   count_in,
+                "count_out":  count_out,
+                "total_in":   total_in,
+                "total_out":  total_out,
+                "first_seen": first_seen,
+                "last_seen":  last_seen,
                 "types":      types,
             }
 
@@ -213,88 +192,42 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(err)
 
-    def _get_more_transactions(self):
-        try:
-            from db import get_connection
-            import queries
-
-            conn = get_connection()
-            old_stdout = sys.stdout
-            sys.stdout = buf = io.StringIO()
-            queries.remaining_transactions(conn)
-            sys.stdout = old_stdout
-            conn.close()
-
-            text = buf.getvalue().encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(text)))
-            self.end_headers()
-            self.wfile.write(text)
-
-        except Exception as e:
-            sys.stdout = old_stdout if 'old_stdout' in dir() else sys.stdout
-            err = str(e).encode()
-            self.send_response(500)
-            self.send_header("Content-Type", "text/plain")
-            self.send_header("Content-Length", str(len(err)))
-            self.end_headers()
-            self.wfile.write(err)
-
     def _get_summary(self):
         try:
-            from db import get_connection
-            import psycopg2.extras
+            rows = _cache["rows"]
+            total_txns = len(rows)
+            total_fees = sum(r.get("fee", 0) or 0 for r in rows) / 1e9
 
-            conn = get_connection()
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT
-                        COUNT(*)                                                      AS total_txns,
-                        TO_TIMESTAMP(MIN(block_time))::TEXT                           AS first_txn,
-                        TO_TIMESTAMP(MAX(block_time))::TEXT                           AS last_txn,
-                        COALESCE(SUM(fee), 0) / 1e9                                   AS total_fees,
-                        COUNT(DISTINCT DATE(TO_TIMESTAMP(block_time)))                AS active_days
-                    FROM transactions
-                """)
-                row = dict(cur.fetchone())
+            block_times = [r["block_time"] for r in rows if r.get("block_time")]
+            first_txn = (
+                datetime.datetime.utcfromtimestamp(min(block_times)).strftime("%Y-%m-%d %H:%M:%S")
+                if block_times else ""
+            )
+            last_txn = (
+                datetime.datetime.utcfromtimestamp(max(block_times)).strftime("%Y-%m-%d %H:%M:%S")
+                if block_times else ""
+            )
+            active_days = (
+                len({datetime.datetime.utcfromtimestamp(bt).date() for bt in block_times})
+                if block_times else 0
+            )
 
-                cur.execute("""
-                    SELECT COUNT(DISTINCT token) AS unique_tokens
-                    FROM (
-                        SELECT token_in  AS token FROM transactions
-                        WHERE token_in  IS NOT NULL AND token_in  <> ''
-                        UNION
-                        SELECT token_out AS token FROM transactions
-                        WHERE token_out IS NOT NULL AND token_out <> ''
-                    ) t
-                """)
-                row["unique_tokens"] = cur.fetchone()["unique_tokens"]
-
-                cur.execute("""
-                    SELECT token, COUNT(*) AS cnt
-                    FROM (
-                        SELECT token_in  AS token FROM transactions
-                        WHERE token_in  IS NOT NULL AND token_in  <> ''
-                        UNION ALL
-                        SELECT token_out AS token FROM transactions
-                        WHERE token_out IS NOT NULL AND token_out <> ''
-                    ) t
-                    GROUP BY token ORDER BY cnt DESC LIMIT 1
-                """)
-                top = cur.fetchone()
-                row["top_token"] = top["token"] if top else ""
-
-            conn.close()
+            tokens = []
+            for r in rows:
+                if r.get("token_in"):  tokens.append(r["token_in"])
+                if r.get("token_out"): tokens.append(r["token_out"])
+            unique_tokens = len(set(tokens))
+            counter = collections.Counter(tokens)
+            top_token = counter.most_common(1)[0][0] if counter else ""
 
             result = {
-                "total_txns":    int(row["total_txns"]),
-                "first_txn":     str(row["first_txn"] or ""),
-                "last_txn":      str(row["last_txn"]  or ""),
-                "total_fees":    float(row["total_fees"]),
-                "active_days":   int(row["active_days"]),
-                "unique_tokens": int(row["unique_tokens"]),
-                "top_token":     str(row["top_token"]),
+                "total_txns":    total_txns,
+                "first_txn":     first_txn,
+                "last_txn":      last_txn,
+                "total_fees":    total_fees,
+                "active_days":   active_days,
+                "unique_tokens": unique_tokens,
+                "top_token":     top_token,
             }
             data = json.dumps(result).encode()
             self.send_response(200)
@@ -312,35 +245,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def _get_trend(self):
         try:
-            from db import get_connection
-            import psycopg2.extras
+            rows = _cache["rows"]
+            STABLES = {"USDC", "USDT", "USDH"}
+            months = collections.defaultdict(lambda: {"txn_count": 0, "usd_in": 0.0, "usd_out": 0.0})
 
-            conn = get_connection()
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT
-                        TO_CHAR(TO_TIMESTAMP(block_time), 'YYYY-MM') AS month,
-                        COUNT(*)                                       AS txn_count,
-                        COALESCE(SUM(CASE WHEN token_in  IN ('USDC','USDT','USDH')
-                                         THEN amount_in  ELSE 0 END), 0) AS usd_in,
-                        COALESCE(SUM(CASE WHEN token_out IN ('USDC','USDT','USDH')
-                                         THEN amount_out ELSE 0 END), 0) AS usd_out
-                    FROM transactions
-                    GROUP BY month
-                    ORDER BY month
-                """)
-                rows = [
-                    {
-                        "month":     r["month"],
-                        "txn_count": int(r["txn_count"]),
-                        "usd_in":    float(r["usd_in"]),
-                        "usd_out":   float(r["usd_out"]),
-                    }
-                    for r in cur.fetchall()
-                ]
-            conn.close()
+            for r in rows:
+                bt = r.get("block_time")
+                if not bt:
+                    continue
+                month = datetime.datetime.utcfromtimestamp(bt).strftime("%Y-%m")
+                months[month]["txn_count"] += 1
+                if r.get("token_in") in STABLES:
+                    months[month]["usd_in"] += r.get("amount_in", 0) or 0
+                if r.get("token_out") in STABLES:
+                    months[month]["usd_out"] += r.get("amount_out", 0) or 0
 
-            data = json.dumps(rows).encode()
+            result = [
+                {"month": m, **v}
+                for m, v in sorted(months.items())
+            ]
+
+            data = json.dumps(result).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -475,7 +400,7 @@ class Handler(BaseHTTPRequestHandler):
                     "price_per_token": price,
                 })
 
-            # 5. Sort: largest USD value first, no-price tokens last
+            # Sort: largest USD value first
             holdings.sort(key=lambda h: (h["usd_value"] is None, -(h["usd_value"] or 0)))
 
             data = json.dumps(holdings).encode()
@@ -487,7 +412,7 @@ class Handler(BaseHTTPRequestHandler):
 
         except Exception as e:
             import traceback
-            traceback.print_exc()   # prints full traceback to server terminal
+            traceback.print_exc()
             err = json.dumps({"error": str(e)}).encode()
             self.send_response(500)
             self.send_header("Content-Type", "application/json")
