@@ -164,13 +164,13 @@
       width: min(1200px, 100%);
       margin-top: 16px;
       border: 1.5px solid #000;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       display: none;
     }
     #summary-bar.visible { display: grid; }
 
     .stat-cell {
-      padding: 16px 20px;
+      padding: 28px 28px;
       border-right: 1px solid #e8e8e8;
     }
     .stat-cell:last-child { border-right: none; }
@@ -182,36 +182,29 @@
       letter-spacing: 0.14em;
       text-transform: uppercase;
       color: #aaa;
-      margin-bottom: 6px;
+      margin-bottom: 10px;
     }
 
     .stat-value {
       display: block;
       font-family: 'SF Mono', ui-monospace, 'Fira Code', 'Courier New', monospace;
-      font-size: 18px;
+      font-size: 32px;
       font-weight: 700;
       color: #000;
-      line-height: 1.2;
+      line-height: 1.1;
     }
 
     .stat-sub {
       display: block;
-      font-size: 10px;
+      font-size: 11px;
       color: #aaa;
-      margin-top: 3px;
+      margin-top: 6px;
     }
 
-
-    /* Row 2 separator on desktop */
-    .stat-cell:nth-child(4)   { border-right: none; }
-    .stat-cell:nth-child(n+5) { border-top: 1px solid #e8e8e8; }
-
     @media (max-width: 768px) {
-      #summary-bar { grid-template-columns: repeat(2, 1fr); }
-      .stat-cell:nth-child(4)   { border-right: 1px solid #e8e8e8; } /* reset desktop override */
-      .stat-cell:nth-child(even) { border-right: none; }
-      .stat-cell:nth-child(n+3)  { border-top: 1px solid #e8e8e8; }
-      .stat-cell:nth-child(n+5)  { border-top: 1px solid #e8e8e8; } /* keep row 2 separator */
+      #summary-bar { grid-template-columns: 1fr; }
+      .stat-cell { border-right: none; border-bottom: 1px solid #e8e8e8; }
+      .stat-cell:last-child { border-bottom: none; }
     }
   </style>
 </head>
@@ -231,44 +224,19 @@
 
   <div id="summary-bar">
     <div class="stat-cell">
-      <span class="stat-label">Stablecoin P&amp;L</span>
-      <span class="stat-value" id="stat-pnl">—</span>
-      <span class="stat-sub" id="stat-pnl-sub">net from USDC · USDT swaps</span>
-    </div>
-    <div class="stat-cell">
-      <span class="stat-label">Volume Traded</span>
-      <span class="stat-value" id="stat-volume">—</span>
-      <span class="stat-sub" id="stat-volume-sub">—</span>
-    </div>
-    <div class="stat-cell">
-      <span class="stat-label">SOL Net from Trading</span>
-      <span class="stat-value" id="stat-sol-net">—</span>
-      <span class="stat-sub" id="stat-sol-net-sub">—</span>
-    </div>
-    <div class="stat-cell">
-      <span class="stat-label">Wasted on Failures</span>
-      <span class="stat-value" id="stat-failed">—</span>
-      <span class="stat-sub" id="stat-failed-sub">—</span>
-    </div>
-    <div class="stat-cell">
-      <span class="stat-label">Avg Hold Time</span>
-      <span class="stat-value" id="stat-hold">—</span>
-      <span class="stat-sub" id="stat-hold-sub">buy → sell per token</span>
-    </div>
-    <div class="stat-cell">
-      <span class="stat-label">Top DEX Used</span>
-      <span class="stat-value" id="stat-dex">—</span>
-      <span class="stat-sub" id="stat-dex-sub">—</span>
+      <span class="stat-label">Trading Return</span>
+      <span class="stat-value" id="stat-roi">—</span>
+      <span class="stat-sub" id="stat-roi-sub">—</span>
     </div>
     <div class="stat-cell">
       <span class="stat-label">Biggest Single Trade</span>
       <span class="stat-value" id="stat-biggest">—</span>
-      <span class="stat-sub" id="stat-biggest-sub">stablecoin-side</span>
+      <span class="stat-sub" id="stat-biggest-sub">—</span>
     </div>
     <div class="stat-cell">
-      <span class="stat-label">Avg Trade Size</span>
-      <span class="stat-value" id="stat-avg-trade">—</span>
-      <span class="stat-sub" id="stat-avg-trade-sub">per swap</span>
+      <span class="stat-label">Peak Day</span>
+      <span class="stat-value" id="stat-peak">—</span>
+      <span class="stat-sub" id="stat-peak-sub">—</span>
     </div>
   </div>
 
@@ -369,78 +337,49 @@
     let bubbleAnimating = false;
 
     function fetchSummary() {
-      Promise.all([
-        fetch('/summary').then(r => r.json()),
-        fetch('/prices').then(r => r.json()).catch(() => ({})),
-      ]).then(([s, prices]) => {
-          const solPrice = prices['SOL'] || null;
+      fetch('/summary').then(r => r.json()).then(s => {
+        // ── Trading Return (ROI) ─────────────────────────────────────────────
+        const roiEl = document.getElementById('stat-roi');
+        if (s.volume_usd > 0) {
+          const roi     = (s.pnl_usd / s.volume_usd) * 100;
+          const sign    = roi >= 0 ? '+' : '';
+          roiEl.textContent  = `${sign}${roi.toFixed(1)}%`;
+          roiEl.style.color  = roi > 0 ? '#27ae60' : roi < 0 ? '#e74c3c' : '#000';
+          document.getElementById('stat-roi-sub').textContent =
+            `${roi >= 0 ? 'profit' : 'loss'} on $${fmtAmt(s.volume_usd)} traded`;
+        } else {
+          roiEl.textContent = '—';
+          document.getElementById('stat-roi-sub').textContent = 'no stablecoin swaps found';
+        }
 
-          // ── Stablecoin P&L ───────────────────────────────────────────────
-          const pnlEl  = document.getElementById('stat-pnl');
-          const pnl    = s.pnl_usd;
-          const pnlSign = pnl >= 0 ? '+' : '-';
-          pnlEl.textContent  = `${pnlSign}$${fmtAmt(Math.abs(pnl))}`;
-          pnlEl.style.color  = pnl > 0 ? '#27ae60' : pnl < 0 ? '#e74c3c' : '#000';
-          document.getElementById('stat-pnl-sub').textContent =
-            s.volume_usd > 0 ? 'net from USDC · USDT swaps' : 'no stablecoin swaps found';
+        // ── Biggest single trade ─────────────────────────────────────────────
+        const bigEl = document.getElementById('stat-biggest');
+        if (s.biggest_trade > 0) {
+          bigEl.textContent = `$${fmtAmt(s.biggest_trade)}`;
+          document.getElementById('stat-biggest-sub').textContent = 'largest swap in this window';
+        } else {
+          bigEl.textContent = '—';
+          document.getElementById('stat-biggest-sub').textContent = 'no stablecoin swaps found';
+        }
 
-          // ── Volume ───────────────────────────────────────────────────────
-          document.getElementById('stat-volume').textContent =
-            s.volume_usd > 0 ? `$${fmtAmt(s.volume_usd)}` : '—';
-          document.getElementById('stat-volume-sub').textContent =
-            `across ${s.swap_count.toLocaleString()} swaps`;
+        // ── Peak day ────────────────────────────────────────────────────────
+        const peakEl = document.getElementById('stat-peak');
+        if (s.busiest_count > 0) {
+          peakEl.textContent = `${s.busiest_count} trades`;
+          const date     = s.busiest_day ? s.busiest_day.slice(5) : '';  // MM-DD
+          const minPer   = s.busiest_count > 1
+            ? Math.round(24 * 60 / s.busiest_count) : null;
+          const pace     = minPer !== null
+            ? (minPer < 60
+                ? `one every ${minPer} min`
+                : `one every ${(minPer / 60).toFixed(1)} hrs`)
+            : '';
+          document.getElementById('stat-peak-sub').textContent =
+            date ? `on ${date}${pace ? ' · ' + pace : ''}` : pace;
+        }
 
-          // ── SOL net ──────────────────────────────────────────────────────
-          const solEl   = document.getElementById('stat-sol-net');
-          const solNet  = s.sol_net;
-          const solSign = solNet >= 0 ? '+' : '-';
-          solEl.textContent = `${solSign}${fmtAmt(Math.abs(solNet))} SOL`;
-          solEl.style.color = solNet > 0 ? '#27ae60' : solNet < 0 ? '#e74c3c' : '#000';
-          document.getElementById('stat-sol-net-sub').textContent = solPrice
-            ? `≈ ${solSign}$${fmtAmt(Math.abs(solNet) * solPrice)} at today's price`
-            : 'net from swap activity';
-
-          // ── Failed txns ──────────────────────────────────────────────────
-          const failEl = document.getElementById('stat-failed');
-          failEl.textContent = s.failed_count > 0 ? s.failed_count.toLocaleString() : '0';
-          failEl.style.color = s.failed_count > 0 ? '#e74c3c' : '#27ae60';
-          document.getElementById('stat-failed-sub').textContent = s.failed_count > 0
-            ? `${fmtAmt(s.failed_fees)} SOL lost in fees`
-            : 'all transactions succeeded';
-
-          // ── Avg hold time ─────────────────────────────────────────────────
-          if (s.avg_hold_days > 0) {
-            const hold = s.avg_hold_days;
-            document.getElementById('stat-hold').textContent =
-              hold < 1 ? `${Math.round(hold * 24)} hrs` : `${hold.toFixed(1)} days`;
-            document.getElementById('stat-hold-sub').textContent = 'avg buy → sell per token';
-          } else {
-            document.getElementById('stat-hold').textContent = '—';
-            document.getElementById('stat-hold-sub').textContent = 'no completed round-trips';
-          }
-
-          // ── Top DEX ───────────────────────────────────────────────────────
-          if (s.top_dex) {
-            document.getElementById('stat-dex').textContent     = s.top_dex;
-            document.getElementById('stat-dex-sub').textContent = `${s.top_dex_pct}% of all swaps`;
-          }
-
-          // ── Biggest single trade ──────────────────────────────────────────
-          if (s.biggest_trade > 0) {
-            document.getElementById('stat-biggest').textContent     = `$${fmtAmt(s.biggest_trade)}`;
-            document.getElementById('stat-biggest-sub').textContent = 'largest stablecoin swap';
-          }
-
-          // ── Avg trade size ────────────────────────────────────────────────
-          if (s.avg_trade_size > 0) {
-            document.getElementById('stat-avg-trade').textContent     = `$${fmtAmt(s.avg_trade_size)}`;
-            document.getElementById('stat-avg-trade-sub').textContent =
-              `avg per swap · ${s.swap_count.toLocaleString()} total`;
-          }
-
-          document.getElementById('summary-bar').classList.add('visible');
-        })
-        .catch(() => {});
+        document.getElementById('summary-bar').classList.add('visible');
+      }).catch(() => {});
     }
 
     function fetchTokens() {
