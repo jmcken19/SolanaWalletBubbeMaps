@@ -195,39 +195,54 @@ class Handler(BaseHTTPRequestHandler):
     def _get_summary(self):
         try:
             rows = _cache["rows"]
-            total_txns = len(rows)
-            total_fees = sum(r.get("fee", 0) or 0 for r in rows) / 1e9
+            STABLES = {"USDC", "USDT", "USDH"}
 
-            block_times = [r["block_time"] for r in rows if r.get("block_time")]
-            first_txn = (
-                datetime.datetime.utcfromtimestamp(min(block_times)).strftime("%Y-%m-%d %H:%M:%S")
-                if block_times else ""
-            )
-            last_txn = (
-                datetime.datetime.utcfromtimestamp(max(block_times)).strftime("%Y-%m-%d %H:%M:%S")
-                if block_times else ""
-            )
-            active_days = (
-                len({datetime.datetime.utcfromtimestamp(bt).date() for bt in block_times})
-                if block_times else 0
-            )
+            pnl_usd    = 0.0   # net stablecoin flow (received - spent)
+            volume_usd = 0.0   # total stablecoin amounts involved in swaps
+            sol_net    = 0.0   # net wSOL flow through swaps
+            swap_count    = 0
+            failed_count  = 0
+            failed_fees   = 0.0
+            day_counter   = collections.Counter()
 
-            tokens = []
             for r in rows:
-                if r.get("token_in"):  tokens.append(r["token_in"])
-                if r.get("token_out"): tokens.append(r["token_out"])
-            unique_tokens = len(set(tokens))
-            counter = collections.Counter(tokens)
-            top_token = counter.most_common(1)[0][0] if counter else ""
+                bt = r.get("block_time")
+                if bt:
+                    day_counter[datetime.datetime.utcfromtimestamp(bt).strftime("%Y-%m-%d")] += 1
+
+                if r.get("status") == "failed":
+                    failed_count += 1
+                    failed_fees  += r.get("fee", 0) or 0
+
+                if r.get("type") == "SWAP":
+                    swap_count += 1
+                    ti, ai = r.get("token_in", ""),  r.get("amount_in",  0) or 0
+                    to, ao = r.get("token_out", ""), r.get("amount_out", 0) or 0
+                    if ti in STABLES:
+                        pnl_usd    += ai
+                        volume_usd += ai
+                    if to in STABLES:
+                        pnl_usd    -= ao
+                        volume_usd += ao
+                    if ti == "wSOL":
+                        sol_net += ai
+                    if to == "wSOL":
+                        sol_net -= ao
+
+            failed_fees /= 1e9
+            busiest_day, busiest_count = (
+                day_counter.most_common(1)[0] if day_counter else ("", 0)
+            )
 
             result = {
-                "total_txns":    total_txns,
-                "first_txn":     first_txn,
-                "last_txn":      last_txn,
-                "total_fees":    total_fees,
-                "active_days":   active_days,
-                "unique_tokens": unique_tokens,
-                "top_token":     top_token,
+                "pnl_usd":      pnl_usd,
+                "volume_usd":   volume_usd,
+                "sol_net":      sol_net,
+                "swap_count":   swap_count,
+                "failed_count": failed_count,
+                "failed_fees":  failed_fees,
+                "busiest_day":  busiest_day,
+                "busiest_count": busiest_count,
             }
             data = json.dumps(result).encode()
             self.send_response(200)

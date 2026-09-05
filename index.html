@@ -226,24 +226,24 @@
 
   <div id="summary-bar">
     <div class="stat-cell">
-      <span class="stat-label">Total Transactions</span>
-      <span class="stat-value" id="stat-total">—</span>
-      <span class="stat-sub" id="stat-period">—</span>
+      <span class="stat-label">Stablecoin P&amp;L</span>
+      <span class="stat-value" id="stat-pnl">—</span>
+      <span class="stat-sub" id="stat-pnl-sub">net from USDC · USDT swaps</span>
     </div>
     <div class="stat-cell">
-      <span class="stat-label">Total Fees Paid</span>
-      <span class="stat-value" id="stat-fees">—</span>
-      <span class="stat-sub" id="stat-fees-usd">in SOL</span>
+      <span class="stat-label">Volume Traded</span>
+      <span class="stat-value" id="stat-volume">—</span>
+      <span class="stat-sub" id="stat-volume-sub">—</span>
     </div>
     <div class="stat-cell">
-      <span class="stat-label">Active Trading Days</span>
-      <span class="stat-value" id="stat-active-days">—</span>
-      <span class="stat-sub" id="stat-tokens">—</span>
+      <span class="stat-label">SOL Net from Trading</span>
+      <span class="stat-value" id="stat-sol-net">—</span>
+      <span class="stat-sub" id="stat-sol-net-sub">—</span>
     </div>
     <div class="stat-cell">
-      <span class="stat-label">Most Traded Token</span>
-      <span class="stat-value" id="stat-top-token">—</span>
-      <span class="stat-sub">by frequency</span>
+      <span class="stat-label">Wasted on Failures</span>
+      <span class="stat-value" id="stat-failed">—</span>
+      <span class="stat-sub" id="stat-failed-sub">—</span>
     </div>
   </div>
 
@@ -348,20 +348,41 @@
         fetch('/summary').then(r => r.json()),
         fetch('/prices').then(r => r.json()).catch(() => ({})),
       ]).then(([s, prices]) => {
-          const first  = s.first_txn ? s.first_txn.slice(0, 10) : '—';
-          const last   = s.last_txn  ? s.last_txn.slice(0, 10)  : '—';
-          const period = first === last ? first : `${first} → ${last}`;
+          const solPrice = prices['SOL'] || null;
 
-          const solPrice   = prices['SOL'] || null;
-          const feesUSD    = solPrice ? `≈ $${fmtAmt(s.total_fees * solPrice)} USD` : 'in SOL';
+          // ── Stablecoin P&L ───────────────────────────────────────────────
+          const pnlEl  = document.getElementById('stat-pnl');
+          const pnl    = s.pnl_usd;
+          const pnlSign = pnl >= 0 ? '+' : '-';
+          pnlEl.textContent  = `${pnlSign}$${fmtAmt(Math.abs(pnl))}`;
+          pnlEl.style.color  = pnl > 0 ? '#27ae60' : pnl < 0 ? '#e74c3c' : '#000';
+          document.getElementById('stat-pnl-sub').textContent =
+            s.volume_usd > 0 ? 'net from USDC · USDT swaps' : 'no stablecoin swaps found';
 
-          document.getElementById('stat-total').textContent       = s.total_txns.toLocaleString();
-          document.getElementById('stat-period').textContent      = period;
-          document.getElementById('stat-fees').textContent        = `${fmtAmt(s.total_fees)} SOL`;
-          document.getElementById('stat-fees-usd').textContent    = feesUSD;
-          document.getElementById('stat-active-days').textContent = s.active_days.toLocaleString();
-          document.getElementById('stat-tokens').textContent      = `${s.unique_tokens} unique tokens`;
-          document.getElementById('stat-top-token').textContent   = s.top_token || '—';
+          // ── Volume ───────────────────────────────────────────────────────
+          document.getElementById('stat-volume').textContent =
+            s.volume_usd > 0 ? `$${fmtAmt(s.volume_usd)}` : '—';
+          document.getElementById('stat-volume-sub').textContent =
+            `across ${s.swap_count.toLocaleString()} swaps`;
+
+          // ── SOL net ──────────────────────────────────────────────────────
+          const solEl   = document.getElementById('stat-sol-net');
+          const solNet  = s.sol_net;
+          const solSign = solNet >= 0 ? '+' : '-';
+          solEl.textContent = `${solSign}${fmtAmt(Math.abs(solNet))} SOL`;
+          solEl.style.color = solNet > 0 ? '#27ae60' : solNet < 0 ? '#e74c3c' : '#000';
+          document.getElementById('stat-sol-net-sub').textContent = solPrice
+            ? `≈ ${solSign}$${fmtAmt(Math.abs(solNet) * solPrice)} at today's price`
+            : 'net from swap activity';
+
+          // ── Failed txns ──────────────────────────────────────────────────
+          const failEl = document.getElementById('stat-failed');
+          failEl.textContent = s.failed_count > 0 ? s.failed_count.toLocaleString() : '0';
+          failEl.style.color = s.failed_count > 0 ? '#e74c3c' : '#27ae60';
+          document.getElementById('stat-failed-sub').textContent = s.failed_count > 0
+            ? `${fmtAmt(s.failed_fees)} SOL lost in fees`
+            : 'all transactions succeeded';
+
           document.getElementById('summary-bar').classList.add('visible');
         })
         .catch(() => {});
