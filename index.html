@@ -202,11 +202,16 @@
     }
 
 
+    /* Row 2 separator on desktop */
+    .stat-cell:nth-child(4)   { border-right: none; }
+    .stat-cell:nth-child(n+5) { border-top: 1px solid #e8e8e8; }
+
     @media (max-width: 768px) {
       #summary-bar { grid-template-columns: repeat(2, 1fr); }
-      .stat-cell:nth-child(2) { border-right: none; }
-      .stat-cell:nth-child(3) { border-top: 1px solid #e8e8e8; border-right: 1px solid #e8e8e8; }
-      .stat-cell:nth-child(4) { border-top: 1px solid #e8e8e8; }
+      .stat-cell:nth-child(4)   { border-right: 1px solid #e8e8e8; } /* reset desktop override */
+      .stat-cell:nth-child(even) { border-right: none; }
+      .stat-cell:nth-child(n+3)  { border-top: 1px solid #e8e8e8; }
+      .stat-cell:nth-child(n+5)  { border-top: 1px solid #e8e8e8; } /* keep row 2 separator */
     }
   </style>
 </head>
@@ -244,6 +249,26 @@
       <span class="stat-label">Wasted on Failures</span>
       <span class="stat-value" id="stat-failed">—</span>
       <span class="stat-sub" id="stat-failed-sub">—</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Avg Hold Time</span>
+      <span class="stat-value" id="stat-hold">—</span>
+      <span class="stat-sub" id="stat-hold-sub">buy → sell per token</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Top DEX Used</span>
+      <span class="stat-value" id="stat-dex">—</span>
+      <span class="stat-sub" id="stat-dex-sub">—</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Biggest Single Trade</span>
+      <span class="stat-value" id="stat-biggest">—</span>
+      <span class="stat-sub" id="stat-biggest-sub">stablecoin-side</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Avg Trade Size</span>
+      <span class="stat-value" id="stat-avg-trade">—</span>
+      <span class="stat-sub" id="stat-avg-trade-sub">per swap</span>
     </div>
   </div>
 
@@ -382,6 +407,36 @@
           document.getElementById('stat-failed-sub').textContent = s.failed_count > 0
             ? `${fmtAmt(s.failed_fees)} SOL lost in fees`
             : 'all transactions succeeded';
+
+          // ── Avg hold time ─────────────────────────────────────────────────
+          if (s.avg_hold_days > 0) {
+            const hold = s.avg_hold_days;
+            document.getElementById('stat-hold').textContent =
+              hold < 1 ? `${Math.round(hold * 24)} hrs` : `${hold.toFixed(1)} days`;
+            document.getElementById('stat-hold-sub').textContent = 'avg buy → sell per token';
+          } else {
+            document.getElementById('stat-hold').textContent = '—';
+            document.getElementById('stat-hold-sub').textContent = 'no completed round-trips';
+          }
+
+          // ── Top DEX ───────────────────────────────────────────────────────
+          if (s.top_dex) {
+            document.getElementById('stat-dex').textContent     = s.top_dex;
+            document.getElementById('stat-dex-sub').textContent = `${s.top_dex_pct}% of all swaps`;
+          }
+
+          // ── Biggest single trade ──────────────────────────────────────────
+          if (s.biggest_trade > 0) {
+            document.getElementById('stat-biggest').textContent     = `$${fmtAmt(s.biggest_trade)}`;
+            document.getElementById('stat-biggest-sub').textContent = 'largest stablecoin swap';
+          }
+
+          // ── Avg trade size ────────────────────────────────────────────────
+          if (s.avg_trade_size > 0) {
+            document.getElementById('stat-avg-trade').textContent     = `$${fmtAmt(s.avg_trade_size)}`;
+            document.getElementById('stat-avg-trade-sub').textContent =
+              `avg per swap · ${s.swap_count.toLocaleString()} total`;
+          }
 
           document.getElementById('summary-bar').classList.add('visible');
         })

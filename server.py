@@ -197,13 +197,23 @@ class Handler(BaseHTTPRequestHandler):
             rows = _cache["rows"]
             STABLES = {"USDC", "USDT", "USDH"}
 
-            pnl_usd    = 0.0   # net stablecoin flow (received - spent)
-            volume_usd = 0.0   # total stablecoin amounts involved in swaps
-            sol_net    = 0.0   # net wSOL flow through swaps
+            pnl_usd    = 0.0
+            volume_usd = 0.0
+            sol_net    = 0.0
             swap_count    = 0
             failed_count  = 0
             failed_fees   = 0.0
-            day_counter   = collections.Counter()
+            biggest_trade = 0.0
+            day_counter    = collections.Counter()
+            source_counter = collections.Counter()
+            token_first_buy  = {}   # token -> earliest block_time it was received
+            token_first_sell = {}   # token -> earliest block_time it was sent
+
+            DEX_NAMES = {
+                "JUPITER": "Jupiter", "RAYDIUM": "Raydium", "ORCA": "Orca",
+                "MARINADE": "Marinade", "TENSOR": "Tensor",
+                "MAGIC_EDEN": "Magic Eden", "UNKNOWN": "Unknown",
+            }
 
             for r in rows:
                 bt = r.get("block_time")
@@ -218,31 +228,62 @@ class Handler(BaseHTTPRequestHandler):
                     swap_count += 1
                     ti, ai = r.get("token_in", ""),  r.get("amount_in",  0) or 0
                     to, ao = r.get("token_out", ""), r.get("amount_out", 0) or 0
+
                     if ti in STABLES:
                         pnl_usd    += ai
                         volume_usd += ai
+                        biggest_trade = max(biggest_trade, ai)
                     if to in STABLES:
                         pnl_usd    -= ao
                         volume_usd += ao
+                        biggest_trade = max(biggest_trade, ao)
                     if ti == "wSOL":
                         sol_net += ai
                     if to == "wSOL":
                         sol_net -= ao
 
+                    src = r.get("source", "")
+                    if src:
+                        source_counter[src] += 1
+
+                    # Hold time: track earliest buy (in) and sell (out) per token
+                    if bt:
+                        if ti and ti not in STABLES and ti != "wSOL":
+                            if ti not in token_first_buy or bt < token_first_buy[ti]:
+                                token_first_buy[ti] = bt
+                        if to and to not in STABLES and to != "wSOL":
+                            if to not in token_first_sell or bt < token_first_sell[to]:
+                                token_first_sell[to] = bt
+
             failed_fees /= 1e9
-            busiest_day, busiest_count = (
-                day_counter.most_common(1)[0] if day_counter else ("", 0)
+
+            # Average hold time (days between first buy and first sell per token)
+            hold_times = [
+                (token_first_sell[t] - token_first_buy[t]) / 86400
+                for t in token_first_buy
+                if t in token_first_sell and token_first_sell[t] > token_first_buy[t]
+            ]
+            avg_hold_days = sum(hold_times) / len(hold_times) if hold_times else 0
+
+            # Top DEX
+            top_dex_raw, top_dex_count = (
+                source_counter.most_common(1)[0] if source_counter else ("", 0)
             )
+            top_dex     = DEX_NAMES.get(top_dex_raw, top_dex_raw.replace("_", " ").title())
+            top_dex_pct = round(top_dex_count / swap_count * 100) if swap_count else 0
 
             result = {
-                "pnl_usd":      pnl_usd,
-                "volume_usd":   volume_usd,
-                "sol_net":      sol_net,
-                "swap_count":   swap_count,
-                "failed_count": failed_count,
-                "failed_fees":  failed_fees,
-                "busiest_day":  busiest_day,
-                "busiest_count": busiest_count,
+                "pnl_usd":       pnl_usd,
+                "volume_usd":    volume_usd,
+                "sol_net":       sol_net,
+                "swap_count":    swap_count,
+                "failed_count":  failed_count,
+                "failed_fees":   failed_fees,
+                "biggest_trade": biggest_trade,
+                "avg_hold_days": avg_hold_days,
+                "top_dex":       top_dex,
+                "top_dex_pct":   top_dex_pct,
+                "avg_trade_size": volume_usd / swap_count if swap_count else 0,
             }
             data = json.dumps(result).encode()
             self.send_response(200)
