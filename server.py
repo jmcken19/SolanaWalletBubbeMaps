@@ -54,6 +54,10 @@ class Handler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
             wallet = params.get("wallet", [""])[0].strip()
             self._get_holdings(wallet)
+        elif parsed.path == "/token_pnl":
+            params = parse_qs(parsed.query)
+            token = params.get("token", [""])[0].strip()
+            self._get_token_pnl(token)
         else:
             self.send_error(404)
 
@@ -266,6 +270,46 @@ class Handler(BaseHTTPRequestHandler):
                 for m, v in sorted(months.items())
             ]
 
+            data = json.dumps(result).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            err = json.dumps({"error": str(e)}).encode()
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(err)))
+            self.end_headers()
+            self.wfile.write(err)
+
+    def _get_token_pnl(self, token):
+        try:
+            rows = _cache["rows"]
+            STABLES = {"USDC", "USDT", "USDH"}
+            cost_usd    = 0.0  # stablecoins paid to acquire token
+            revenue_usd = 0.0  # stablecoins received from selling token
+
+            for r in rows:
+                if r.get("type") != "SWAP":
+                    continue
+                ti, ai = r.get("token_in", ""),  r.get("amount_in",  0) or 0
+                to, ao = r.get("token_out", ""), r.get("amount_out", 0) or 0
+                # Bought token with stablecoin: received token, paid stable
+                if ti == token and to in STABLES:
+                    cost_usd += ao
+                # Sold token for stablecoin: sent token, received stable
+                if to == token and ti in STABLES:
+                    revenue_usd += ai
+
+            result = {
+                "token":        token,
+                "cost_usd":     cost_usd,
+                "revenue_usd":  revenue_usd,
+                "realized_pnl": revenue_usd - cost_usd,
+                "has_data":     cost_usd > 0 or revenue_usd > 0,
+            }
             data = json.dumps(result).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

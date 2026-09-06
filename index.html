@@ -224,19 +224,19 @@
 
   <div id="summary-bar">
     <div class="stat-cell">
-      <span class="stat-label">Trading Return</span>
-      <span class="stat-value" id="stat-roi">—</span>
-      <span class="stat-sub" id="stat-roi-sub">—</span>
+      <span class="stat-label">Portfolio Value</span>
+      <span class="stat-value" id="stat-portfolio">—</span>
+      <span class="stat-sub" id="stat-portfolio-sub">current holdings</span>
     </div>
     <div class="stat-cell">
-      <span class="stat-label">Biggest Single Trade</span>
-      <span class="stat-value" id="stat-biggest">—</span>
-      <span class="stat-sub" id="stat-biggest-sub">—</span>
+      <span class="stat-label">Largest Position</span>
+      <span class="stat-value" id="stat-top-token">—</span>
+      <span class="stat-sub" id="stat-top-token-sub">—</span>
     </div>
     <div class="stat-cell">
-      <span class="stat-label">Peak Day</span>
-      <span class="stat-value" id="stat-peak">—</span>
-      <span class="stat-sub" id="stat-peak-sub">—</span>
+      <span class="stat-label">P&amp;L on Top Token</span>
+      <span class="stat-value" id="stat-top-pnl">—</span>
+      <span class="stat-sub" id="stat-top-pnl-sub">stablecoin swaps only</span>
     </div>
   </div>
 
@@ -320,7 +320,6 @@
           enterBtn.disabled  = false;
           enterBtn.textContent = 'Enter';
           fetchHoldings(addr);
-          fetchSummary();
           return;
         }
       };
@@ -336,50 +335,27 @@
     let bubbleRenderer = null;
     let bubbleAnimating = false;
 
-    function fetchSummary() {
-      fetch('/summary').then(r => r.json()).then(s => {
-        // ── Trading Return (ROI) ─────────────────────────────────────────────
-        const roiEl = document.getElementById('stat-roi');
-        if (s.volume_usd > 0) {
-          const roi     = (s.pnl_usd / s.volume_usd) * 100;
-          const sign    = roi >= 0 ? '+' : '';
-          roiEl.textContent  = `${sign}${roi.toFixed(1)}%`;
-          roiEl.style.color  = roi > 0 ? '#27ae60' : roi < 0 ? '#e74c3c' : '#000';
-          document.getElementById('stat-roi-sub').textContent =
-            `${roi >= 0 ? 'profit' : 'loss'} on $${fmtAmt(s.volume_usd)} traded`;
-        } else {
-          roiEl.textContent = '—';
-          document.getElementById('stat-roi-sub').textContent = 'no stablecoin swaps found';
-        }
-
-        // ── Biggest single trade ─────────────────────────────────────────────
-        const bigEl = document.getElementById('stat-biggest');
-        if (s.biggest_trade > 0) {
-          bigEl.textContent = `$${fmtAmt(s.biggest_trade)}`;
-          document.getElementById('stat-biggest-sub').textContent = 'largest swap in this window';
-        } else {
-          bigEl.textContent = '—';
-          document.getElementById('stat-biggest-sub').textContent = 'no stablecoin swaps found';
-        }
-
-        // ── Peak day ────────────────────────────────────────────────────────
-        const peakEl = document.getElementById('stat-peak');
-        if (s.busiest_count > 0) {
-          peakEl.textContent = `${s.busiest_count} trades`;
-          const date     = s.busiest_day ? s.busiest_day.slice(5) : '';  // MM-DD
-          const minPer   = s.busiest_count > 1
-            ? Math.round(24 * 60 / s.busiest_count) : null;
-          const pace     = minPer !== null
-            ? (minPer < 60
-                ? `one every ${minPer} min`
-                : `one every ${(minPer / 60).toFixed(1)} hrs`)
-            : '';
-          document.getElementById('stat-peak-sub').textContent =
-            date ? `on ${date}${pace ? ' · ' + pace : ''}` : pace;
-        }
-
-        document.getElementById('summary-bar').classList.add('visible');
-      }).catch(() => {});
+    function fetchTopPnl(symbol) {
+      fetch(`/token_pnl?token=${encodeURIComponent(symbol)}`)
+        .then(r => r.json())
+        .then(d => {
+          const pnlEl = document.getElementById('stat-top-pnl');
+          if (d.has_data) {
+            const pnl  = d.realized_pnl;
+            const sign = pnl >= 0 ? '+' : '-';
+            pnlEl.textContent = `${sign}$${fmtAmt(Math.abs(pnl))}`;
+            pnlEl.style.color = pnl > 0 ? '#27ae60' : pnl < 0 ? '#e74c3c' : '#000';
+            const bought = d.cost_usd > 0    ? `spent $${fmtAmt(d.cost_usd)}`    : '';
+            const sold   = d.revenue_usd > 0 ? `received $${fmtAmt(d.revenue_usd)}` : '';
+            document.getElementById('stat-top-pnl-sub').textContent =
+              [bought, sold].filter(Boolean).join(' · ');
+          } else {
+            pnlEl.textContent = '—';
+            document.getElementById('stat-top-pnl-sub').textContent =
+              `no stablecoin swaps for ${symbol}`;
+          }
+        })
+        .catch(() => {});
     }
 
     function fetchTokens() {
@@ -413,6 +389,23 @@
           walletEl.textContent = short ? short : '';
           if (holdings.length) {
             renderBubbles(holdings, 'holdings');
+
+            // ── Portfolio value ──────────────────────────────────────────
+            const total = holdings.reduce((s, h) => s + (h.usd_value || 0), 0);
+            document.getElementById('stat-portfolio').textContent = `$${fmtAmt(total)}`;
+            document.getElementById('stat-portfolio-sub').textContent =
+              `across ${holdings.length} token${holdings.length !== 1 ? 's' : ''}`;
+
+            // ── Largest position ─────────────────────────────────────────
+            const top = holdings[0];
+            document.getElementById('stat-top-token').textContent = top.symbol;
+            document.getElementById('stat-top-token-sub').textContent =
+              `$${fmtAmt(top.usd_value)} · ${fmtAmt(top.amount)} ${top.symbol}`;
+
+            document.getElementById('summary-bar').classList.add('visible');
+
+            // ── P&L on top token ─────────────────────────────────────────
+            fetchTopPnl(top.symbol);
           } else {
             document.getElementById('bubble-placeholder').textContent = 'No holdings found.';
           }
