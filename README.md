@@ -1,8 +1,8 @@
-Solana Wallet Transaction Tracker
+Solana Wallet Transaction Tracker<br>
 From this
 
 <img width="699" height="325" alt="sql" src="https://github.com/user-attachments/assets/05f9b033-57c7-44f2-934f-f5343fa46503" />
-To this with claude code
+<br>To this with claude code
 <img width="882" height="787" alt="image" src="https://github.com/user-attachments/assets/fb00a5c4-bf1b-4e7c-9316-b791ffc8046a" />
 
 Tech Stack
