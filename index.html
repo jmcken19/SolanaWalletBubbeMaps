@@ -914,16 +914,19 @@
       firstLabel.textContent = weeks[0][0].toLocaleString('en-US', { month: 'short' });
       monthRow.appendChild(firstLabel);
 
+      let lastLabelX = 0;
       weeks.forEach((week, wi) => {
         if (wi === 0) return;
         const prevMonth = weeks[wi - 1][0].getMonth();
         const curMonth  = week[0].getMonth();
-        if (curMonth !== prevMonth) {
+        const x = wi * CELL_STEP;
+        if (curMonth !== prevMonth && x - lastLabelX >= 28) {
           const lbl = document.createElement('span');
           lbl.className  = 'heatmap-month';
-          lbl.style.left = (wi * CELL_STEP) + 'px';
+          lbl.style.left = x + 'px';
           lbl.textContent = week[0].toLocaleString('en-US', { month: 'short' });
           monthRow.appendChild(lbl);
+          lastLabelX = x;
         }
       });
       inner.appendChild(monthRow);
@@ -975,8 +978,8 @@
         tooltip.style.display = 'block';
       });
       chart.addEventListener('mousemove', e => {
-        tooltip.style.left = (e.pageX + 14) + 'px';
-        tooltip.style.top  = (e.pageY - 32) + 'px';
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top  = (e.clientY - 36) + 'px';
       });
       chart.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
