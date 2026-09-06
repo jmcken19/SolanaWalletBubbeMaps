@@ -5,15 +5,6 @@ From this
 <br>To this with claude code
 <img width="882" height="787" alt="image" src="https://github.com/user-attachments/assets/fb00a5c4-bf1b-4e7c-9316-b791ffc8046a" />
 
-Tech Stack
+Tech Stack: Python 3.x · Helius REST API + RPC · Jupiter Lite Price API · Three.js · requests
 
-Python 3.11+
-SQLite3
-Helius API 
-requests, python-dotenv
-Features
-
-Paginates through up to 500 transactions (5 pages × 100)
-Parses token swaps — resolves mint addresses to readable names (wSOL, USDC, etc.)
-Converts lamport fees to SOL
-Displays: Total value, SOL balance, Token balance
+Features: Paginates up to 500 transactions · Resolves mint addresses to readable symbols · Live wallet holdings via Helius RPC · Live USD prices via Jupiter · 3D bubble map of token holdings · 52-week trading activity heatmap · Clickable token detail panel · Stats: Total Value, SOL Balance, Token Balance
