@@ -289,6 +289,98 @@
       flex-shrink: 0;
     }
 
+    /* ── Recent Trades ───────────────────────────────────────────────────── */
+    #trades-wrap {
+      width: min(1200px, 100%);
+      margin-top: 16px;
+      border: 1.5px solid #000;
+      display: none;
+    }
+    #trades-wrap.visible { display: block; }
+
+    #trades-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 14px 24px 0;
+      margin-bottom: 12px;
+    }
+
+    #trades-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #000;
+    }
+
+    #trades-count {
+      font-size: 9px;
+      color: #aaa;
+      letter-spacing: 0.08em;
+    }
+
+    #trades-placeholder {
+      padding: 0 24px 20px;
+      font-family: 'SF Mono', ui-monospace, 'Fira Code', 'Courier New', monospace;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    #trades-list {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .trade-row {
+      display: flex;
+      align-items: center;
+      padding: 9px 24px;
+      border-top: 1px solid #f0f0f0;
+      gap: 12px;
+      font-family: 'SF Mono', ui-monospace, 'Fira Code', 'Courier New', monospace;
+      font-size: 12px;
+    }
+
+    .trade-date {
+      color: #aaa;
+      font-size: 10px;
+      white-space: nowrap;
+      min-width: 130px;
+    }
+
+    .trade-sent {
+      flex: 1;
+      text-align: right;
+      color: #555;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .trade-arrow {
+      color: #bbb;
+      flex-shrink: 0;
+    }
+
+    .trade-received {
+      flex: 1;
+      color: #000;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .trade-failed {
+      font-size: 9px;
+      color: #bbb;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-left: 6px;
+      font-weight: 400;
+    }
+
     #heatmap-tooltip {
       position: fixed;
       display: none;
@@ -356,6 +448,15 @@
   </div>
   <div id="heatmap-tooltip"></div>
 
+  <div id="trades-wrap">
+    <div id="trades-header">
+      <span id="trades-label">Recent Trades</span>
+      <span id="trades-count"></span>
+    </div>
+    <div id="trades-placeholder">Run analysis to see trades</div>
+    <div id="trades-list"></div>
+  </div>
+
   <script>
     const DEFAULT  = 'FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP';
     const input    = document.getElementById('wallet');
@@ -404,6 +505,13 @@
       document.getElementById('heatmap-placeholder').style.display = 'block';
       document.getElementById('heatmap-placeholder').textContent = 'Run analysis to see activity';
 
+      // Reset trades
+      document.getElementById('trades-wrap').classList.remove('visible');
+      document.getElementById('trades-list').innerHTML = '';
+      document.getElementById('trades-count').textContent = '';
+      document.getElementById('trades-placeholder').style.display = 'block';
+      document.getElementById('trades-placeholder').textContent = 'Run analysis to see trades';
+
       // Reset bubble map and detail panel
       if (bubbleRenderer) {
         bubbleAnimating = false;
@@ -429,6 +537,7 @@
           enterBtn.textContent = 'Enter';
           fetchHoldings(addr);
           fetchHeatmap();
+          fetchTrades();
           return;
         }
       };
@@ -985,6 +1094,47 @@
 
       placeholder.style.display = 'none';
       chart.style.display = 'block';
+    }
+
+    // ── Recent Trades ─────────────────────────────────────────────────────────
+    function fetchTrades() {
+      const wrap = document.getElementById('trades-wrap');
+      wrap.classList.add('visible');
+      document.getElementById('trades-placeholder').textContent = 'Loading trades…';
+
+      fetch('/trades')
+        .then(r => r.json())
+        .then(trades => renderTrades(trades))
+        .catch(() => {
+          document.getElementById('trades-placeholder').textContent = 'Failed to load trades.';
+        });
+    }
+
+    function renderTrades(trades) {
+      const list        = document.getElementById('trades-list');
+      const placeholder = document.getElementById('trades-placeholder');
+      const countEl     = document.getElementById('trades-count');
+
+      if (!trades.length) {
+        placeholder.textContent = 'No swap trades found.';
+        return;
+      }
+
+      countEl.textContent = `${trades.length} swap${trades.length !== 1 ? 's' : ''}`;
+      placeholder.style.display = 'none';
+
+      list.innerHTML = trades.map(t => {
+        const sent     = `${fmtAmt(t.amount_in)} ${t.token_in || '—'}`;
+        const received = `${fmtAmt(t.amount_out)} ${t.token_out || '—'}`;
+        const failed   = t.status === 'failed'
+          ? `<span class="trade-failed">failed</span>` : '';
+        return `<div class="trade-row">
+          <span class="trade-date">${t.date}</span>
+          <span class="trade-sent">${sent}</span>
+          <span class="trade-arrow">→</span>
+          <span class="trade-received">${received}${failed}</span>
+        </div>`;
+      }).join('');
     }
 
     function showHoldingDetail(holding) {

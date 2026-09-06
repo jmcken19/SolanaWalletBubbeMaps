@@ -60,6 +60,8 @@ class Handler(BaseHTTPRequestHandler):
             self._get_token_pnl(token)
         elif parsed.path == "/heatmap":
             self._get_heatmap()
+        elif parsed.path == "/trades":
+            self._get_trades()
         else:
             self.send_error(404)
 
@@ -336,6 +338,37 @@ class Handler(BaseHTTPRequestHandler):
                     day = datetime.datetime.utcfromtimestamp(bt).strftime("%Y-%m-%d")
                     day_counter[day] += 1
             data = json.dumps(dict(day_counter)).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            err = json.dumps({"error": str(e)}).encode()
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(err)))
+            self.end_headers()
+            self.wfile.write(err)
+
+    def _get_trades(self):
+        try:
+            rows = _cache["rows"]
+            swaps = [r for r in rows if r.get("type") == "SWAP"]
+            swaps.sort(key=lambda r: r.get("block_time", 0), reverse=True)
+            result = []
+            for r in swaps[:100]:
+                bt = r.get("block_time")
+                result.append({
+                    "date":       datetime.datetime.utcfromtimestamp(bt).strftime("%b %d, %Y %H:%M") if bt else "",
+                    "token_in":   r.get("token_in", ""),
+                    "amount_in":  r.get("amount_in", 0) or 0,
+                    "token_out":  r.get("token_out", ""),
+                    "amount_out": r.get("amount_out", 0) or 0,
+                    "status":     r.get("status", "success"),
+                    "signature":  r.get("signature", ""),
+                })
+            data = json.dumps(result).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
