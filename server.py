@@ -58,6 +58,8 @@ class Handler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
             token = params.get("token", [""])[0].strip()
             self._get_token_pnl(token)
+        elif parsed.path == "/heatmap":
+            self._get_heatmap()
         else:
             self.send_error(404)
 
@@ -311,6 +313,29 @@ class Handler(BaseHTTPRequestHandler):
                 "has_data":     cost_usd > 0 or revenue_usd > 0,
             }
             data = json.dumps(result).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            err = json.dumps({"error": str(e)}).encode()
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(err)))
+            self.end_headers()
+            self.wfile.write(err)
+
+    def _get_heatmap(self):
+        try:
+            rows = _cache["rows"]
+            day_counter = collections.Counter()
+            for r in rows:
+                bt = r.get("block_time")
+                if bt:
+                    day = datetime.datetime.utcfromtimestamp(bt).strftime("%Y-%m-%d")
+                    day_counter[day] += 1
+            data = json.dumps(dict(day_counter)).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))

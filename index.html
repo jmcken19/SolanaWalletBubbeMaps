@@ -206,6 +206,101 @@
       .stat-cell { border-right: none; border-bottom: 1px solid #e8e8e8; }
       .stat-cell:last-child { border-bottom: none; }
     }
+
+    /* ── Heatmap ─────────────────────────────────────────────────────────── */
+    #heatmap-wrap {
+      width: min(1200px, 100%);
+      margin-top: 16px;
+      border: 1.5px solid #000;
+      padding: 14px 24px 24px;
+      display: none;
+    }
+    #heatmap-wrap.visible { display: block; }
+
+    #heatmap-label {
+      display: block;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #000;
+      margin-bottom: 14px;
+    }
+
+    #heatmap-placeholder {
+      font-family: 'SF Mono', ui-monospace, 'Fira Code', 'Courier New', monospace;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    #heatmap-chart { display: none; overflow-x: auto; }
+
+    .heatmap-inner { display: inline-block; }
+
+    .heatmap-month-row {
+      position: relative;
+      height: 16px;
+      margin-bottom: 4px;
+    }
+
+    .heatmap-month {
+      position: absolute;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.10em;
+      color: #aaa;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .heatmap-grid {
+      display: flex;
+      gap: 3px;
+    }
+
+    .heatmap-col {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .heatmap-cell {
+      width: 13px;
+      height: 13px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      font-size: 9px;
+      color: #aaa;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .legend-cell {
+      width: 13px;
+      height: 13px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    #heatmap-tooltip {
+      position: fixed;
+      display: none;
+      background: #000;
+      color: #fff;
+      font-family: 'SF Mono', ui-monospace, 'Fira Code', 'Courier New', monospace;
+      font-size: 11px;
+      padding: 5px 12px;
+      pointer-events: none;
+      z-index: 1000;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -254,6 +349,13 @@
   </div>
 
 
+  <div id="heatmap-wrap">
+    <span id="heatmap-label">Trading Activity</span>
+    <div id="heatmap-placeholder">Run analysis to see activity</div>
+    <div id="heatmap-chart"></div>
+  </div>
+  <div id="heatmap-tooltip"></div>
+
   <script>
     const DEFAULT  = 'FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP';
     const input    = document.getElementById('wallet');
@@ -296,6 +398,12 @@
       // Reset summary bar
       document.getElementById('summary-bar').classList.remove('visible');
 
+      // Reset heatmap
+      document.getElementById('heatmap-wrap').classList.remove('visible');
+      document.getElementById('heatmap-chart').style.display = 'none';
+      document.getElementById('heatmap-placeholder').style.display = 'block';
+      document.getElementById('heatmap-placeholder').textContent = 'Run analysis to see activity';
+
       // Reset bubble map and detail panel
       if (bubbleRenderer) {
         bubbleAnimating = false;
@@ -320,6 +428,7 @@
           enterBtn.disabled  = false;
           enterBtn.textContent = 'Enter';
           fetchHoldings(addr);
+          fetchHeatmap();
           return;
         }
       };
@@ -739,6 +848,139 @@
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
       sprite.scale.set(3.2, 1, 1);
       return sprite;
+    }
+
+    // ── Heatmap ───────────────────────────────────────────────────────────────
+    function fetchHeatmap() {
+      const wrap = document.getElementById('heatmap-wrap');
+      const placeholder = document.getElementById('heatmap-placeholder');
+      placeholder.textContent = 'Loading activity…';
+      wrap.classList.add('visible');
+
+      fetch('/heatmap')
+        .then(r => r.json())
+        .then(data => renderHeatmap(data))
+        .catch(() => { placeholder.textContent = 'Failed to load activity.'; });
+    }
+
+    function heatColor(count, max) {
+      if (count === 0) return '#f2f2f2';
+      const ratio = count / max;
+      if (ratio <= 0.25) return '#c0c0c0';
+      if (ratio <= 0.50) return '#808080';
+      if (ratio <= 0.75) return '#404040';
+      return '#000000';
+    }
+
+    function renderHeatmap(data) {
+      const chart       = document.getElementById('heatmap-chart');
+      const placeholder = document.getElementById('heatmap-placeholder');
+      const tooltip     = document.getElementById('heatmap-tooltip');
+
+      // Build 52-week window ending today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Start on the Sunday that is 52 full weeks before this week's Sunday
+      const startSunday = new Date(today);
+      startSunday.setDate(today.getDate() - today.getDay() - 52 * 7);
+
+      // Build array of week arrays
+      const weeks = [];
+      const cur   = new Date(startSunday);
+      while (cur <= today) {
+        const week = [];
+        for (let d = 0; d < 7 && cur <= today; d++) {
+          week.push(new Date(cur));
+          cur.setDate(cur.getDate() + 1);
+        }
+        weeks.push(week);
+      }
+
+      const maxCount = Math.max(1, ...Object.values(data).map(Number));
+
+      const inner = document.createElement('div');
+      inner.className = 'heatmap-inner';
+
+      // Month label row
+      const monthRow = document.createElement('div');
+      monthRow.className = 'heatmap-month-row';
+      const CELL_STEP = 16; // 13px cell + 3px gap
+
+      const firstLabel = document.createElement('span');
+      firstLabel.className = 'heatmap-month';
+      firstLabel.style.left = '0px';
+      firstLabel.textContent = weeks[0][0].toLocaleString('en-US', { month: 'short' });
+      monthRow.appendChild(firstLabel);
+
+      weeks.forEach((week, wi) => {
+        if (wi === 0) return;
+        const prevMonth = weeks[wi - 1][0].getMonth();
+        const curMonth  = week[0].getMonth();
+        if (curMonth !== prevMonth) {
+          const lbl = document.createElement('span');
+          lbl.className  = 'heatmap-month';
+          lbl.style.left = (wi * CELL_STEP) + 'px';
+          lbl.textContent = week[0].toLocaleString('en-US', { month: 'short' });
+          monthRow.appendChild(lbl);
+        }
+      });
+      inner.appendChild(monthRow);
+
+      // Cell grid
+      const grid = document.createElement('div');
+      grid.className = 'heatmap-grid';
+
+      weeks.forEach(week => {
+        const col = document.createElement('div');
+        col.className = 'heatmap-col';
+        week.forEach(date => {
+          const dateStr = date.toISOString().slice(0, 10);
+          const count   = data[dateStr] || 0;
+          const cell    = document.createElement('div');
+          cell.className        = 'heatmap-cell';
+          cell.style.background = heatColor(count, maxCount);
+          cell.dataset.date     = dateStr;
+          cell.dataset.count    = count;
+          col.appendChild(cell);
+        });
+        grid.appendChild(col);
+      });
+      inner.appendChild(grid);
+
+      // Legend
+      const legend = document.createElement('div');
+      legend.className = 'heatmap-legend';
+      legend.innerHTML = `<span>Less</span>` +
+        ['#f2f2f2','#c0c0c0','#808080','#404040','#000000'].map(c =>
+          `<div class="legend-cell" style="background:${c}"></div>`
+        ).join('') +
+        `<span>More</span>`;
+      inner.appendChild(legend);
+
+      chart.innerHTML = '';
+      chart.appendChild(inner);
+
+      // Tooltip
+      chart.addEventListener('mouseover', e => {
+        const cell = e.target.closest('.heatmap-cell');
+        if (!cell) { tooltip.style.display = 'none'; return; }
+        const count = parseInt(cell.dataset.count);
+        const d     = new Date(cell.dataset.date + 'T12:00:00');
+        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        tooltip.textContent = count > 0
+          ? `${label} — ${count} trade${count !== 1 ? 's' : ''}`
+          : `${label} — No activity`;
+        tooltip.style.display = 'block';
+      });
+      chart.addEventListener('mousemove', e => {
+        tooltip.style.left = (e.pageX + 14) + 'px';
+        tooltip.style.top  = (e.pageY - 32) + 'px';
+      });
+      chart.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+      placeholder.style.display = 'none';
+      chart.style.display = 'block';
     }
 
     function showHoldingDetail(holding) {
