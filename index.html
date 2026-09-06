@@ -379,11 +379,11 @@
 
             // ── SOL balance ───────────────────────────────────────────────
             if (sol) {
-              document.getElementById('stat-sol-balance').textContent = `${fmtAmt(sol.amount)} SOL`;
-              document.getElementById('stat-sol-balance-sub').textContent = `≈ $${fmtAmt(sol.usd_value)}`;
+              document.getElementById('stat-sol-balance').textContent = `$${fmtAmt(sol.usd_value)}`;
+              document.getElementById('stat-sol-balance-sub').textContent = `${fmtAmt(sol.amount)} SOL`;
             } else {
-              document.getElementById('stat-sol-balance').textContent = '0 SOL';
-              document.getElementById('stat-sol-balance-sub').textContent = 'no SOL held';
+              document.getElementById('stat-sol-balance').textContent = '$0.00';
+              document.getElementById('stat-sol-balance-sub').textContent = '0 SOL held';
             }
 
             // ── Token balance ─────────────────────────────────────────────
