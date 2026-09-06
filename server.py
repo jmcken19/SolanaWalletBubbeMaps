@@ -395,8 +395,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 entries.append({"mint": mint, "symbol": symbol, "amount": ui_amt})
 
-            # 3. Filter: drop dust SPL tokens — but always keep SOL regardless of amount
-            entries = [e for e in entries if e["mint"] == SOL_MINT or e["amount"] > 1]
+            # 3. Filter: drop zero-balance SPL tokens; SOL always kept
+            entries = [e for e in entries if e["mint"] == SOL_MINT or e["amount"] > 0]
 
             # 3b. Lookup proper names for unknown tokens via Helius DAS getAsset
             for e in entries:
