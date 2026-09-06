@@ -1110,6 +1110,14 @@
         });
     }
 
+    function cleanTokenName(name) {
+      if (!name) return '—';
+      if (name === 'wSOL') return 'SOL';
+      // Full mint address (base58, ~44 chars) → shorten for display
+      if (name.length > 16) return name.slice(0, 6) + '…' + name.slice(-4);
+      return name;
+    }
+
     function renderTrades(trades) {
       const list        = document.getElementById('trades-list');
       const placeholder = document.getElementById('trades-placeholder');
@@ -1124,8 +1132,10 @@
       placeholder.style.display = 'none';
 
       list.innerHTML = trades.map(t => {
-        const sent     = `${fmtAmt(t.amount_in)} ${t.token_in || '—'}`;
-        const received = `${fmtAmt(t.amount_out)} ${t.token_out || '—'}`;
+        const sentName     = cleanTokenName(t.token_in);
+        const receivedName = cleanTokenName(t.token_out);
+        const sent     = `${fmtAmt(t.amount_in)} ${sentName}`;
+        const received = `${fmtAmt(t.amount_out)} ${receivedName}`;
         const failed   = t.status === 'failed'
           ? `<span class="trade-failed">failed</span>` : '';
         return `<div class="trade-row">
