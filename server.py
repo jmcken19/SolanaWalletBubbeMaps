@@ -451,15 +451,14 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 price_map = {}
 
-            # 5. Compute USD values — only keep tokens with a known price >= $0.01
+            # 5. Compute USD values — keep all tokens; only drop if price is known AND < $0.01
             holdings = []
             for e in entries:
                 price     = price_map.get(e["mint"])
                 usd_value = e["amount"] * price if price is not None else None
 
-                if usd_value is None:
-                    continue
-                if usd_value < 0.01:
+                # Drop only confirmed dust (price known but negligible value)
+                if usd_value is not None and usd_value < 0.01:
                     continue
 
                 holdings.append({

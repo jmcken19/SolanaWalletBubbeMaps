@@ -482,9 +482,10 @@
             const tokenValue  = tokens.reduce((s, h) => s + (h.usd_value || 0), 0);
 
             // ── Total value ───────────────────────────────────────────────
+            const pricedCount = holdings.filter(h => h.usd_value != null).length;
             document.getElementById('stat-total-value').textContent = `$${fmtAmt(totalValue)}`;
             document.getElementById('stat-total-value-sub').textContent =
-              `${holdings.length} token${holdings.length !== 1 ? 's' : ''} with known price`;
+              `${holdings.length} token${holdings.length !== 1 ? 's' : ''} · ${pricedCount} with known price`;
 
             // ── SOL balance ───────────────────────────────────────────────
             if (sol) {
