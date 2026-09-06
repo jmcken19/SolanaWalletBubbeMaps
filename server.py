@@ -354,20 +354,35 @@ class Handler(BaseHTTPRequestHandler):
     def _get_trades(self):
         try:
             rows = _cache["rows"]
+            SOL_ALIASES = {"wSOL", "So11111111111111111111111111111111111111112"}
+
+            def normalize(tok):
+                return "SOL" if tok in SOL_ALIASES else tok
+
             swaps = [r for r in rows if r.get("type") == "SWAP"]
             swaps.sort(key=lambda r: r.get("block_time", 0), reverse=True)
             result = []
-            for r in swaps[:100]:
+            for r in swaps:
+                ti = r.get("token_in", "")
+                to = r.get("token_out", "")
+                # Skip same-token artifacts (wSOL routing hops, fee movements)
+                if normalize(ti) == normalize(to):
+                    continue
+                # Skip rows where either side is empty
+                if not ti or not to:
+                    continue
                 bt = r.get("block_time")
                 result.append({
                     "date":       datetime.datetime.utcfromtimestamp(bt).strftime("%b %d, %Y %H:%M") if bt else "",
-                    "token_in":   r.get("token_in", ""),
+                    "token_in":   ti,
                     "amount_in":  r.get("amount_in", 0) or 0,
-                    "token_out":  r.get("token_out", ""),
+                    "token_out":  to,
                     "amount_out": r.get("amount_out", 0) or 0,
                     "status":     r.get("status", "success"),
                     "signature":  r.get("signature", ""),
                 })
+                if len(result) >= 100:
+                    break
             data = json.dumps(result).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
