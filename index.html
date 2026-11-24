@@ -318,6 +318,22 @@
     .fail { color: var(--err); }
     .more { margin-top: 14px; }
     #bubble-controls[hidden] { display: none; }
+    /* Labels for the solar-system maps: page text that follows each body */
+    .orb-layer { position: absolute; pointer-events: none; overflow: hidden; }
+    .orb-label {
+      position: absolute; left: 0; top: 0; white-space: nowrap; text-align: center; line-height: 1.25;
+      font: 600 13px var(--sans); color: var(--ink); text-shadow: 0 1px 3px #000, 0 0 8px #000;
+    }
+    .orb-label small { display: block; font: 500 11px var(--mono); color: var(--ink-2); }
+    .orb-label.sun { font-size: 14px; color: #fff; }
+    #flow-canvas { display: block; width: 100%; height: 520px; cursor: pointer; background: var(--bg-2); border: 1px solid var(--line); }
+    .beta { font: 500 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--signal); border: 1px solid var(--signal); padding: 3px 5px 2px; border-radius: 2px; margin-left: 8px; vertical-align: 6px; }
+    .key { display: inline-flex; align-items: center; gap: 6px; margin-right: 14px; }
+    .key i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    #flow-detail { margin-top: 14px; display: none; }
+    #flow-detail.visible { display: grid; }
+    #flow-detail h3 { font: 500 14px var(--mono); margin: 0 0 8px; overflow-wrap: anywhere; }
+    @media (max-width: 768px) { #flow-canvas { height: 380px; } }
     #bubble-controls { display: flex; align-items: center; gap: 8px; padding: 10px 24px 0; font-size: 13px; color: var(--ink-3); }
     @media (max-width: 768px) {
       .section { padding: 16px; }
@@ -416,11 +432,30 @@
     <button class="ghost-btn more" id="hold-more" type="button" hidden></button>
   </section>
 
+  <section id="flow-wrap" class="section" aria-labelledby="flow-h">
+    <div class="sec-head">
+      <div>
+        <span class="sec-label" id="flow-h">Money Flow</span><span class="beta">Beta</span>
+        <p class="sec-sub" id="flow-sub"></p>
+        <p class="sec-sub"><span class="key"><i style="background:#5BB6FF"></i>Mostly sent money in</span><span class="key"><i style="background:#FF8A3D"></i>Mostly received money from it</span>Closer and bigger = more money moved. Click a planet.</p>
+      </div>
+    </div>
+    <canvas id="flow-canvas" aria-label="Money flow map: the wallet in the middle, the wallets it traded with orbiting it. The same data is in the table below."></canvas>
+    <div id="flow-detail" class="detail-grid"></div>
+    <div class="scroll" style="margin-top:14px">
+      <table class="tbl">
+        <thead><tr><th scope="col">Wallet</th><th scope="col" class="r">In</th><th scope="col" class="r">Out</th><th scope="col" class="r hide-sm">Txns</th></tr></thead>
+        <tbody id="flow-body"></tbody>
+      </table>
+    </div>
+    <button class="ghost-btn more" id="flow-more" type="button" hidden></button>
+  </section>
+
   <section id="tx-wrap" class="section" aria-labelledby="tx-h">
     <div class="sec-head">
       <div>
         <span class="sec-label" id="tx-h">Recent Transactions</span>
-        <p class="sec-sub">The latest 100, newest first. Times in UTC. Descriptions from Helius.</p>
+        <p class="sec-sub">Newest first. Times in UTC. Descriptions from Helius.</p>
       </div>
     </div>
     <div class="scroll">
@@ -519,6 +554,7 @@
         stopLoading();
         showHoldings(addr, data.holdings || []);
         showTransactions(data.transactions);
+        showFlows(data.flows);
       } catch (e) {
         if (e.name === 'AbortError') return;
         stopLoading();
@@ -580,6 +616,9 @@
       document.getElementById('bubble-controls').hidden = true;
       document.getElementById('holdings-wrap').classList.remove('visible');
       document.getElementById('tx-wrap').classList.remove('visible');
+      document.getElementById('flow-wrap').classList.remove('visible');
+      document.getElementById('flow-detail').classList.remove('visible');
+      disposeFlow();
       startLoading();
     }
 
@@ -643,14 +682,11 @@
     }
 
     // ── Bubble chart ─────────────────────────────────────────────────────────
-    let bubble = null;   // { renderer, alive, ac, ro }
+    let bubble = null;   // handle from renderSystem()
 
     function disposeBubbles() {
       if (!bubble) return;
-      bubble.alive = false;
-      bubble.ac.abort();       // removes the click listener
-      bubble.ro.disconnect();  // removes the resize watcher
-      bubble.renderer.dispose();
+      bubble.dispose();   // stops the loop, removes listeners, frees the GPU context
       bubble = null;
     }
 
@@ -682,6 +718,163 @@
       document.getElementById('bubble-controls').hidden = total <= 10;
     }
 
+    // ── Solar system renderer (shared by the holdings map and Money Flow) ────
+    // A sun in the middle and bodies on their own orbits, biggest closest. Bodies orbit
+    // slowly (still with reduced motion); drag to look around, click a body to pick it.
+    //   bodies: [{ size, color, wire, label, sub, data, flow: 'in' | 'out' | undefined, dots }]
+    function renderSystem({ canvas, box, sun, bodies, onPick }) {
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0C0C10);
+      const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 3000);
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+      scene.add(new THREE.PointLight(0xFFB07A, 1.3, 0, 1.2));
+      const key = new THREE.DirectionalLight(0xffffff, 0.35); key.position.set(4, 10, 6); scene.add(key);
+      const controls = new THREE.OrbitControls(camera, canvas);
+      controls.enableDamping = true; controls.dampingFactor = 0.06; controls.enablePan = false;
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const SUN_R = 1.5;
+      const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(SUN_R, 40, 40), new THREE.MeshBasicMaterial({ color: 0xFF8A3D }));
+      const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(SUN_R * 1.45, 32, 32),
+        new THREE.MeshBasicMaterial({ color: 0xFF8A3D, transparent: true, opacity: 0.1 }));
+      scene.add(sunMesh, sunGlow);
+
+      // Orbits: each body gets its own, spaced by the sizes of neighbours plus label room
+      let orbit = SUN_R + 3.6;   // room for the sun's label
+      bodies.forEach((b, i) => {
+        orbit += (i ? bodies[i - 1].size : 0) + b.size + 0.9;
+        b.orbit = orbit;
+      });
+      const maxOrbit = (bodies.length ? bodies[bodies.length - 1].orbit + bodies[bodies.length - 1].size : SUN_R) + 1;
+      // Draw planets bigger on large systems so they don't shrink to dots; golden-angle
+      // spacing keeps neighbours on adjacent orbits apart.
+      const grow = Math.max(1, maxOrbit / 30);
+      bodies.forEach(b => { b.draw = b.size * grow; });
+      sunMesh.scale.setScalar(grow);
+      sunGlow.scale.setScalar(grow);
+      // HTML labels over the canvas: crisp and the same size at any zoom or screen width
+      const parent = canvas.parentElement;
+      if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      const layer = document.createElement('div');
+      layer.className = 'orb-layer';
+      parent.appendChild(layer);
+      const makeTag = (name, sub, cls) => {
+        const el = document.createElement('div');
+        el.className = 'orb-label' + (cls ? ' ' + cls : '');
+        const b = document.createElement('span'); b.textContent = name;     // textContent: chain data is never HTML
+        const sm = document.createElement('small'); sm.textContent = sub;
+        el.append(b, sm);
+        layer.appendChild(el);
+        return el;
+      };
+      const sunTag = makeTag(sun.label, sun.sub, 'sun');
+      const tmp = new THREE.Vector3();
+      const place = (el, x, y, z) => {
+        tmp.set(x, y, z).project(camera);
+        const visible = tmp.z < 1;
+        el.style.display = visible ? '' : 'none';
+        if (visible) el.style.transform = `translate(${((tmp.x + 1) / 2 * layer.clientWidth).toFixed(1)}px, ${((1 - tmp.y) / 2 * layer.clientHeight).toFixed(1)}px) translate(-50%, -100%)`;
+      };
+
+      const meshes = [];
+      bodies.forEach((b, i) => {
+        scene.add(new THREE.LineLoop(
+          new THREE.BufferGeometry().setFromPoints(Array.from({ length: 128 }, (_, k) => {
+            const a = k / 128 * Math.PI * 2; return new THREE.Vector3(Math.cos(a) * b.orbit, 0, Math.sin(a) * b.orbit);
+          })),
+          new THREE.LineBasicMaterial({ color: 0xEDEAE3, transparent: true, opacity: 0.07 })));
+
+        b.mesh = new THREE.Mesh(new THREE.SphereGeometry(b.draw, 32, 32),
+          new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.6, emissive: b.color, emissiveIntensity: b.flow ? 0.15 : 0.05 }));
+        b.mesh.userData.body = b;
+        scene.add(b.mesh);
+        meshes.push(b.mesh);
+        if (b.wire) {
+          b.wireMesh = new THREE.Mesh(new THREE.SphereGeometry(b.draw * 1.004, 16, 12),
+            new THREE.MeshBasicMaterial({ color: b.wire, wireframe: true, transparent: true, opacity: 0.22 }));
+          scene.add(b.wireMesh);
+        }
+        b.tag = makeTag(b.label, b.sub);
+        if (b.flow) {
+          b.line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+            new THREE.LineBasicMaterial({ color: b.color, transparent: true, opacity: 0.2 }));
+          scene.add(b.line);
+          b.dotMeshes = Array.from({ length: b.dots || 1 }, (_, k) => {
+            const d = new THREE.Mesh(new THREE.SphereGeometry(0.1 * Math.max(1, maxOrbit / 14), 8, 8), new THREE.MeshBasicMaterial({ color: b.color }));
+            d.userData.offset = k / (b.dots || 1);
+            scene.add(d);
+            return d;
+          });
+        }
+        b.angle = i * 2.39996;                                  // golden angle: spread around the sun
+        b.speed = 0.14 / Math.pow(b.orbit / (SUN_R + 3), 1.5);  // inner bodies move faster
+      });
+
+      const ac = new AbortController();
+      const ray = new THREE.Raycaster();
+      let downAt = null;
+      canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; }, { signal: ac.signal });
+      canvas.addEventListener('click', e => {
+        if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;   // was a drag
+        const rect = canvas.getBoundingClientRect();
+        ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
+        const hit = ray.intersectObjects(meshes)[0];
+        if (hit) onPick(hit.object.userData.body.data);
+      }, { signal: ac.signal });
+
+      const resize = () => {
+        const W = box.clientWidth, H = canvas.clientHeight || 500;
+        camera.aspect = W / H; camera.updateProjectionMatrix();
+        const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
+        const halfW = Math.atan(Math.tan(halfV) * camera.aspect);
+        const dist = (maxOrbit * 1.12 + 1) / Math.tan(Math.min(halfV, halfW));   // small margin for labels and perspective
+        // Wide boxes: tilted view. Tall boxes (phones): look almost straight down so the
+        // system spreads into a full circle and labels don't stack.
+        camera.position.set(0, camera.aspect < 1 ? 4 : 1.25, 1).normalize().multiplyScalar(dist);
+        renderer.setSize(W, H, false);
+        Object.assign(layer.style, { left: canvas.offsetLeft + 'px', top: canvas.offsetTop + 'px', width: W + 'px', height: H + 'px' });
+      };
+      const ro = new ResizeObserver(resize); ro.observe(box); resize();
+
+      let alive = true, last = 0;
+      (function animate(t) {
+        if (!alive) return;
+        requestAnimationFrame(animate);
+        const dt = last ? Math.min(0.05, (t - last) / 1000) : 0;
+        last = t;
+        bodies.forEach(b => {
+          if (!reduce) b.angle += b.speed * dt;
+          const x = Math.cos(b.angle) * b.orbit, z = Math.sin(b.angle) * b.orbit;
+          b.mesh.position.set(x, 0, z);
+          if (b.wireMesh) b.wireMesh.position.set(x, 0, z);
+          place(b.tag, x, b.draw * 1.15, z);
+          if (b.flow) {
+            const pos = b.line.geometry.attributes.position;
+            pos.setXYZ(1, x, 0, z); pos.needsUpdate = true;
+            b.dotMeshes.forEach(d => {
+              const f = reduce ? d.userData.offset : ((t / 2600 + d.userData.offset) % 1);
+              const k = b.flow === 'in' ? 1 - f : f;             // 'in': from the body to the sun
+              d.position.set(x * k, 0, z * k);
+            });
+          }
+        });
+        controls.update();
+        place(sunTag, 0, SUN_R * grow * 1.2, 0);
+        renderer.render(scene, camera);
+      })(0);
+
+      return {
+        dispose() {
+          alive = false; ac.abort(); ro.disconnect(); controls.dispose(); layer.remove();
+          scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+          renderer.dispose();
+        },
+      };
+    }
+
+    // Holdings map: the wallet is the sun, its tokens orbit it (biggest value closest).
     function renderBubbles(items) {
       const placeholder = document.getElementById('bubble-placeholder');
       const canvas      = document.getElementById('bubble-canvas');
@@ -689,133 +882,43 @@
 
       disposeBubbles();
       if (!window.THREE) { placeholder.textContent = "The 3D map couldn't load."; return; }
-
       placeholder.style.display = 'none';
       canvas.style.display      = 'block';
 
-      const scene    = new THREE.Scene();
-      scene.background = new THREE.Color(0x111116);
-      const camera   = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
-      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-      dir.position.set(5, 10, 5);
-      scene.add(dir);
-
-      const controls = new THREE.OrbitControls(camera, renderer.domElement);
-      controls.enableDamping  = true;
-      controls.dampingFactor  = 0.05;
-      controls.autoRotate     = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-      controls.autoRotateSpeed = 0.4;
-
-      // Size: log scale so small holdings stay visible next to a dominant one
-      // Size: half area-true (big holdings look big), half log (small ones stay visible)
-      const minSize = 0.35, maxSize = 2.6;
+      // Size: half area-true, half log, so big holdings look big and small ones stay visible
+      const minSize = 0.5, maxSize = 2.4;
       const logVal  = v => v > 0 ? Math.log10(v + 1) : 0;
       const maxVal  = Math.max(1, ...items.filter(i => i.kind === 'token').map(i => i.value || 0));
       const maxLog  = logVal(maxVal) || 1;
       const sizeOf  = v => minSize + (maxSize - minSize) * Math.min(1, 0.5 * Math.sqrt(v / maxVal) + 0.5 * logVal(v) / maxLog);
-      items.forEach(i => {
-        i.size = i.kind === 'noprice' ? 0.8 : i.kind === 'other' ? Math.min(1.4, sizeOf(i.value)) : (i.value != null ? sizeOf(i.value) : minSize);
-      });
 
-      // Layout: biggest in the middle, the rest placed outward along a golden-angle spiral,
-      // each at the first spot where it doesn't touch anything already placed.
-      const placed = [];
-      const GAP = 1.6;   // room between bubbles for their labels
-      // Tokens by size first; the two group bubbles go last, on the outside
-      [...items].sort((a, b) => (a.kind !== 'token') - (b.kind !== 'token') || b.size - a.size).forEach((it, k) => {
-        if (k === 0) { it.x = 0; it.z = 0; placed.push(it); return; }
-        for (let step = 1; ; step++) {
-          const r = 1.3 * Math.sqrt(step), a = step * 2.39996;
-          const x = Math.cos(a) * r, z = Math.sin(a) * r;
-          if (placed.every(p => Math.hypot(p.x - x, p.z - z) > p.size + it.size + GAP)) { it.x = x; it.z = z; break; }
+      const tokens = items.filter(i => i.kind === 'token').sort((a, b) => (b.value || 0) - (a.value || 0));
+      const groups = items.filter(i => i.kind !== 'token');   // "+N other" and "N no price" orbit outermost
+      const bodies = tokens.concat(groups).map(it => {
+        if (it.kind === 'token') {
+          const t = it.token, priced = t.usd_value != null;
+          return {
+            size: priced ? sizeOf(t.usd_value) : minSize,
+            color: priced ? 0x4A4A56 : 0x3A2A20, wire: priced ? 0xEDEAE3 : 0xFF8A3D,
+            label: t.symbol,
+            sub: `${fmtShort(t.amount)}${priced ? ' · $' + fmtShort(t.usd_value) : ''}`,
+            data: it,
+          };
         }
-        placed.push(it);
-      });
-      const extent = Math.max(4, ...placed.map(p => Math.hypot(p.x, p.z) + p.size));
-
-      const clickable = [];
-      placed.forEach((it, rank) => {
-        const priced = it.value != null;
-        const color  = it.kind === 'noprice' ? 0x3A2A20 : it.kind === 'other' ? 0x2A2A33 : (priced ? 0x3A3A44 : 0x3A2A20);
-        const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(it.size, 32, 32),
-          new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0 })
-        );
-        mesh.position.set(it.x, Math.sin(rank * 1.7) * 0.25, it.z);
-        mesh.userData.item = it;
-        scene.add(mesh);
-        clickable.push(mesh);
-
-        const wire = new THREE.Mesh(
-          new THREE.SphereGeometry(it.size * 1.003, 16, 12),
-          new THREE.MeshBasicMaterial({
-            color: it.kind === 'token' && priced ? 0xEDEAE3 : 0xFF8A3D,
-            wireframe: true, transparent: true,
-            opacity: it.kind === 'token' && priced ? 0.12 : 0.3,
-          })
-        );
-        wire.position.copy(mesh.position);
-        scene.add(wire);
-
-        {   // every bubble is labelled; text scales with the bubble but stays readable
-          const sub = it.kind === 'noprice' ? 'see table'
-            : it.value != null ? `$${fmtShort(it.value)}` : `${fmtShort(it.token.amount)} tokens`;
-          const label = makeLabel(it.label, sub);
-          const phone = wrap.clientWidth < 600 ? 1.5 : 1;   // narrow canvas: bigger text
-          const ls = Math.max(1, extent / 7) * (0.7 + 0.3 * it.size / maxSize) * phone;
-          label.scale.multiplyScalar(ls);
-          label.position.set(mesh.position.x, mesh.position.y + it.size + 0.45 * ls, mesh.position.z);
-          scene.add(label);
-        }
+        return {
+          size: it.kind === 'other' ? Math.min(1.4, sizeOf(it.value)) : 0.9,
+          color: 0x2A2A33, wire: 0xFF8A3D,
+          label: it.label, sub: it.kind === 'noprice' ? 'see table' : '$' + fmtShort(it.value),
+          data: it,
+        };
       });
 
-      // Click: a token opens its details, a group bubble jumps to the full list
-      const ac = new AbortController();
-      const raycaster = new THREE.Raycaster();
-      let downAt = null;
-      canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; }, { signal: ac.signal });
-      canvas.addEventListener('click', e => {
-        if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;   // was a drag
-        const rect  = canvas.getBoundingClientRect();
-        const mouse = new THREE.Vector2(
-          ((e.clientX - rect.left)  / rect.width)  *  2 - 1,
-          ((e.clientY - rect.top)   / rect.height) * -2 + 1
-        );
-        raycaster.setFromCamera(mouse, camera);
-        const hit = raycaster.intersectObjects(clickable)[0];
-        if (!hit) return;
-        const it = hit.object.userData.item;
-        if (it.kind === 'token') showHoldingDetail(it.token);
-        else jumpToTable(it.kind === 'noprice');
-      }, { signal: ac.signal });
-
-      const resize = () => {
-        const W = wrap.clientWidth, H = canvas.clientHeight || 500;
-        camera.aspect = W / H;
-        camera.updateProjectionMatrix();
-        // Fit the whole layout at any screen width, looking down at it at an angle
-        const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
-        const halfW = Math.atan(Math.tan(halfV) * camera.aspect);
-        const dist  = (extent * 0.92 + 1.5) / Math.tan(Math.min(halfV, halfW));
-        camera.position.set(0, 1.5, 1).normalize().multiplyScalar(dist);   // look down more: fills the box, fewer hidden labels
-        renderer.setSize(W, H, false);
-      };
-      const ro = new ResizeObserver(resize);
-      ro.observe(wrap);
-      resize();
-
-      bubble = { renderer, alive: true, ac, ro };
-      const me = bubble;
-      (function animate() {
-        if (!me.alive) return;
-        requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-      })();
+      const total = allHoldings.reduce((a, h) => a + (h.usd_value || 0), 0);
+      bubble = renderSystem({
+        canvas, box: wrap, bodies,
+        sun: { label: shortAddr(currentAddr), sub: total ? '$' + fmtShort(total) + ' total' : 'this wallet' },
+        onPick: it => { if (it.kind === 'token') showHoldingDetail(it.token); else jumpToTable(it.kind === 'noprice'); },
+      });
     }
 
     // ── Holdings table: every token, searchable and sortable ────────────────
@@ -925,21 +1028,32 @@
       wrap.classList.add('visible');
       if (!txns) { body.innerHTML = '<tr><td colspan="4" style="color:var(--ink-3)">Couldn\'t load recent transactions.</td></tr>'; return; }
       if (!txns.length) { body.innerHTML = '<tr><td colspan="4" style="color:var(--ink-3)">No transactions found.</td></tr>'; return; }
+      // 10 at a time: "Show 10 more" reveals the next batch
+      const STEP = 10;
+      let shown = STEP;
       const more = document.getElementById('tx-more');
-      more.hidden = txns.length <= 20;
-      more.textContent = `Show all ${txns.length}`;
-      more.onclick = () => { body.querySelectorAll('tr.later').forEach(r => r.hidden = false); more.hidden = true; };
+      const refreshMore = () => {
+        const left = txns.length - shown;
+        more.hidden = left <= 0;
+        more.textContent = `Show ${Math.min(STEP, left)} more (${left} left)`;
+      };
+      more.onclick = () => {
+        shown += STEP;
+        body.querySelectorAll('tr').forEach((r, i) => { r.hidden = i >= shown; });
+        refreshMore();
+      };
       body.innerHTML = txns.map((t, i) => {
         const when = t.time ? new Date(t.time * 1000).toISOString().slice(0, 16).replace('T', ' ') : '—';
         const type = t.type.replace(/_/g, ' ').toLowerCase();
         const what = t.description || (t.source ? `${t.source.replace(/_/g, ' ').toLowerCase()} transaction` : '—');
-        return `<tr${i >= 20 ? ' class="later" hidden' : ''}>
+        return `<tr${i >= STEP ? ' hidden' : ''}>
           <td class="m">${when}</td>
           <td>${esc(type)}${t.ok ? '' : ' <span class="fail">failed</span>'}</td>
           <td class="desc">${esc(what)}</td>
           <td class="r"><a href="https://solscan.io/tx/${encodeURIComponent(t.signature)}" target="_blank" rel="noopener" style="color:var(--ink-2)">Solscan</a></td>
         </tr>`;
       }).join('');
+      refreshMore();
     }
 
     // Short form for map labels: $983K, $1.2M, $45.10
@@ -985,28 +1099,106 @@
       if (b) copyTokenAddr(b);
     });
 
-    function makeLabel(name, subtitle) {
-      const c   = document.createElement('canvas');
-      c.width   = 256;
-      c.height  = 80;
-      const ctx = c.getContext('2d');
+    // ── Money flow (beta): the wallet as a sun, counterparties as planets ────
+    // Built from the SOL and token transfers in the latest transactions. Blue planets mostly
+    // sent money in, orange ones mostly received it. Orbit closeness and size follow USD moved.
+    let flowView = null;
+    function disposeFlow() {
+      if (!flowView) return;
+      flowView.dispose();
+      flowView = null;
+    }
+    const usdOrDash = v => v > 0 ? '$' + fmtShort(v) : '—';
 
-      // Shorten long names for display
-      const displayName = name.length > 12 ? name.slice(0, 6) + '…' + name.slice(-4) : name;
+    function showFlows(flows) {
+      const wrap = document.getElementById('flow-wrap');
+      const body = document.getElementById('flow-body');
+      const canvas = document.getElementById('flow-canvas');
+      wrap.classList.add('visible');
+      const cps = flows ? flows.counterparties : [];
+      if (!flows || !cps.length) {
+        document.getElementById('flow-sub').textContent = flows
+          ? `No SOL or token transfers in the latest ${flows.txns} transactions.`
+          : "Couldn't load transfers for this wallet.";
+        canvas.style.display = 'none';
+        body.innerHTML = '';
+        document.getElementById('flow-more').hidden = true;
+        return;
+      }
+      canvas.style.display = 'block';
+      document.getElementById('flow-sub').textContent =
+        `Who sent money and tokens to this wallet and where it sent them, from its latest ${flows.txns} transactions ` +
+        `(${flows.total.toLocaleString('en-US')} wallets). Planets can be people, exchanges, programs or trading pools. ` +
+        `USD uses today's prices.`;
 
-      ctx.font      = '600 30px "IBM Plex Sans", sans-serif';
-      ctx.fillStyle = '#EDEAE3';
-      ctx.textAlign = 'center';
-      ctx.fillText(displayName, 128, 34);
+      // Table: 10 at a time
+      const STEP = 10;
+      let shown = STEP;
+      body.innerHTML = cps.map((c, i) => `<tr class="click" tabindex="0" data-i="${i}"${i >= STEP ? ' hidden' : ''}>
+          <td class="m">${esc(shortAddr(c.address))}</td>
+          <td class="r">${usdOrDash(c.usd_in)}${c.sol_in ? ` <span style="color:var(--ink-3)">${fmtShort(c.sol_in)} SOL</span>` : ''}</td>
+          <td class="r">${usdOrDash(c.usd_out)}${c.sol_out ? ` <span style="color:var(--ink-3)">${fmtShort(c.sol_out)} SOL</span>` : ''}</td>
+          <td class="r hide-sm">${c.txns}</td>
+        </tr>`).join('');
+      const more = document.getElementById('flow-more');
+      const refresh = () => { const left = cps.length - shown; more.hidden = left <= 0; more.textContent = `Show ${Math.min(STEP, left)} more (${left} left)`; };
+      more.onclick = () => { shown += STEP; body.querySelectorAll('tr').forEach((r, i) => { r.hidden = i >= shown; }); refresh(); };
+      refresh();
+      body.onclick = e => { const tr = e.target.closest('tr[data-i]'); if (tr) showFlowDetail(cps[+tr.dataset.i], true); };
+      body.onkeydown = e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const tr = e.target.closest('tr[data-i]'); if (tr) { e.preventDefault(); showFlowDetail(cps[+tr.dataset.i], true); }
+      };
 
-      ctx.font      = '500 20px "IBM Plex Mono", monospace';
-      ctx.fillStyle = '#8E8C96';
-      ctx.fillText(subtitle, 128, 60);
+      renderFlow(cps.slice(0, 12));   // the 12 biggest as planets; the table lists all
+    }
 
-      const tex    = new THREE.CanvasTexture(c);
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
-      sprite.scale.set(3.2, 1, 1);
-      return sprite;
+    function showFlowDetail(c, scroll) {
+      const el = document.getElementById('flow-detail');
+      const last = c.last ? new Date(c.last * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '—';
+      el.innerHTML = `
+        <h3 style="grid-column:1/-1">${esc(c.address)}</h3>
+        <span class="label">Sent in</span><span class="value">${usdOrDash(c.usd_in)} · ${fmtAmt(c.sol_in)} SOL · ${c.tokens_in} token transfer${c.tokens_in === 1 ? '' : 's'}</span>
+        <span class="label">Received</span><span class="value">${usdOrDash(c.usd_out)} · ${fmtAmt(c.sol_out)} SOL · ${c.tokens_out} token transfer${c.tokens_out === 1 ? '' : 's'}</span>
+        <span class="label">Transactions</span><span class="value">${c.txns}</span>
+        <span class="label">Last seen</span><span class="value">${last}</span>
+        <span class="label">Links</span><span class="value"><a href="https://solscan.io/account/${encodeURIComponent(c.address)}" target="_blank" rel="noopener" style="color:var(--ink-2)">Solscan</a> ·
+          <button class="copy-btn" data-addr="${esc(c.address)}" style="margin:0">Copy address</button> ·
+          <button class="copy-btn" data-look="${esc(c.address)}" style="margin:0">Look up this wallet</button></span>`;
+      el.classList.add('visible');
+      if (scroll) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    document.getElementById('flow-detail').addEventListener('click', e => {
+      const look = e.target.closest('[data-look]');
+      if (look) { input.value = look.dataset.look; input.classList.add('active'); window.scrollTo({ top: 0, behavior: 'smooth' }); run(); return; }
+      const b = e.target.closest('[data-addr]');
+      if (b) copyTokenAddr(b);
+    });
+
+    function renderFlow(cps) {
+      disposeFlow();
+      const canvas = document.getElementById('flow-canvas');
+      if (!window.THREE) return;
+      const vol = c => c.usd_in + c.usd_out;
+      const lg = v => Math.log10(v + 1);
+      const maxLog = lg(Math.max(1, ...cps.map(vol))) || 1;
+      const bodies = cps.map(c => {
+        const incoming = c.usd_in > c.usd_out || (c.usd_in === c.usd_out && c.sol_in + c.tokens_in >= c.sol_out + c.tokens_out);
+        return {
+          size: 0.5 + 1.5 * (vol(c) > 0 ? lg(vol(c)) / maxLog : 0.1),
+          color: incoming ? 0x5BB6FF : 0xFF8A3D,
+          label: shortAddr(c.address),
+          sub: `${usdOrDash(c.usd_in)} in · ${usdOrDash(c.usd_out)} out`,
+          flow: incoming ? 'in' : 'out',
+          dots: Math.min(4, 1 + Math.floor(c.txns / 3)),
+          data: c,
+        };
+      });
+      flowView = renderSystem({
+        canvas, box: canvas, bodies,
+        sun: { label: 'This wallet', sub: shortAddr(currentAddr) },
+        onPick: c => showFlowDetail(c, false),
+      });
     }
 
     function showHoldingDetail(holding) {

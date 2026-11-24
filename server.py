@@ -127,11 +127,18 @@ def get_holdings(wallet):
 RECENT_TXNS = 100        # transactions listed with type and description
 
 
-def get_recent(wallet):
-    """The latest transactions with Helius's type and plain-English description."""
+FLOW_TOP = 30           # counterparties returned for the money-flow view
+
+
+def get_recent_raw(wallet):
+    """The latest transactions, parsed by Helius (type, description, SOL and token transfers)."""
     url = f"{BASE_URL}/v0/addresses/{wallet}/transactions?api-key={API_KEY}&limit={RECENT_TXNS}"
+    return _http_json(url, timeout=15) or []
+
+
+def summarize_txns(raw):
     out = []
-    for t in _http_json(url, timeout=15) or []:
+    for t in raw:
         out.append({
             "signature": t.get("signature", ""),
             "time": t.get("timestamp"),
@@ -144,6 +151,58 @@ def get_recent(wallet):
     return out
 
 
+def build_flows(raw, wallet, holdings):
+    """Who sent SOL/tokens to the wallet and where it sent them, across the given transactions.
+    USD uses today's prices from the holdings lookup (SOL, plus tokens the wallet still holds)."""
+    prices = {h["mint"]: h["price_per_token"] for h in holdings if h.get("price_per_token") is not None}
+    sol_price = prices.get(SOL_MINT) or 0
+    cps = {}
+
+    def cp(addr):
+        return cps.setdefault(addr, {"address": addr, "sol_in": 0.0, "sol_out": 0.0, "usd_in": 0.0,
+                                     "usd_out": 0.0, "tokens_in": 0, "tokens_out": 0, "sigs": set(), "last": 0})
+
+    def add(addr, incoming, sol, usd, token, sig, ts):
+        c = cp(addr)
+        side = "in" if incoming else "out"
+        if token:
+            c["tokens_" + side] += 1
+        else:
+            c["sol_" + side] += sol
+        c["usd_" + side] += usd
+        c["sigs"].add(sig)
+        c["last"] = max(c["last"], ts or 0)
+
+    for t in raw:
+        sig, ts = t.get("signature", ""), t.get("timestamp")
+        for n in t.get("nativeTransfers") or []:
+            sol = (n.get("amount") or 0) / 1e9
+            f, to = n.get("fromUserAccount"), n.get("toUserAccount")
+            if sol <= 0 or not f or not to or f == to:
+                continue
+            if to == wallet:
+                add(f, True, sol, sol * sol_price, False, sig, ts)
+            elif f == wallet:
+                add(to, False, sol, sol * sol_price, False, sig, ts)
+        for x in t.get("tokenTransfers") or []:
+            f, to = x.get("fromUserAccount"), x.get("toUserAccount")
+            if not f or not to or f == to:
+                continue
+            amount = float(x.get("tokenAmount") or 0)
+            usd = amount * prices.get(x.get("mint"), 0)
+            if to == wallet:
+                add(f, True, 0, usd, True, sig, ts)
+            elif f == wallet:
+                add(to, False, 0, usd, True, sig, ts)
+
+    flows = []
+    for c in cps.values():
+        c["txns"] = len(c.pop("sigs"))
+        flows.append(c)
+    flows.sort(key=lambda c: (-(c["usd_in"] + c["usd_out"]), -c["txns"]))
+    return {"counterparties": flows[:FLOW_TOP], "total": len(flows), "txns": len(raw)}
+
+
 def wallet_report(wallet):
     now = time.time()
     with _cache_lock:
@@ -153,15 +212,17 @@ def wallet_report(wallet):
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         holdings_f = pool.submit(get_holdings, wallet)
-        recent_f = pool.submit(get_recent, wallet)
+        recent_f = pool.submit(get_recent_raw, wallet)
         holdings = holdings_f.result()
-        recent = None   # still show holdings if the transaction list fails
+        recent = flows = None   # still show holdings if the transaction list fails
         try:
-            recent = recent_f.result()
+            raw = recent_f.result()
+            recent = summarize_txns(raw)
+            flows = build_flows(raw, wallet, holdings)
         except Exception:
             _log_error()
 
-    payload = {"address": wallet, "holdings": holdings, "transactions": recent}
+    payload = {"address": wallet, "holdings": holdings, "transactions": recent, "flows": flows}
     with _cache_lock:
         if len(_cache) > 500:
             _cache.clear()
