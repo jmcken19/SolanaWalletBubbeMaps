@@ -3,7 +3,7 @@
 State after the 2026-11-24 cleanup, and what is left before showing it to people.
 
 ## Done
-- One endpoint, `/api/wallet?address=`, returns holdings + activity. Each request stands alone,
+- One endpoint, `/api/wallet?address=`, returns holdings + recent transactions. Each request stands alone,
   so two visitors never see each other's wallet (the old global cache mixed them up).
 - Holdings come from one Helius DAS `searchAssets` call (SOL, tokens, names, prices for the
   top ~10K tokens). Jupiter Price API v3 only prices what Helius doesn't; it uses
@@ -12,8 +12,7 @@ State after the 2026-11-24 cleanup, and what is left before showing it to people
 - Address checked (base58, 32-44 chars) on both sides; plain errors shown to the user.
 - API keys never reach the browser and are masked in server logs.
 - Token names/symbols from chain metadata are escaped (they could carry HTML/script).
-- Frontend bugs: click/resize listeners no longer pile up per search; heatmap uses UTC days
-  like the server; tooltip listeners attached once.
+- Frontend bugs: click/resize listeners no longer pile up per search. (The activity calendar was removed 2026-11-24: busy wallets have more history than a lookup can count, so most days showed no data.)
 - Colours and type from the salary repo's theme; layout, wording and features unchanged.
 - Removed seven endpoints the page never called. The Postgres CLI (`main.py`, `runner.py`,
   `db.py`, `queries.py`) is untouched and not used by the site.

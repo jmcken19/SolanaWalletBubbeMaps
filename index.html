@@ -45,7 +45,7 @@
     :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
     /* Section labels: mono, tracked, with the thin spectrum rule */
-    #card-label, #bubble-label, #heatmap-label {
+    #card-label, #bubble-label {
       position: relative;
       display: inline-block;
       font: 500 12px/1.4 var(--mono);
@@ -54,7 +54,7 @@
       color: var(--ink-3);
       padding-bottom: 10px;
     }
-    #card-label::after, #bubble-label::after, #heatmap-label::after {
+    #card-label::after, #bubble-label::after {
       content: ""; position: absolute; left: 0; bottom: 0; width: 40px; height: 2px; background: var(--spectrum);
     }
 
@@ -171,9 +171,6 @@
     }
     #bubble-idle .hi { color: var(--ink); }
     #bubble-idle .sig { color: var(--signal); }
-    #heatmap-loading { margin: 10px 0 0; font: 500 12px/14px var(--mono); color: var(--ink-3); white-space: pre; overflow: hidden; user-select: none; }
-    #heatmap-loading .sig { color: var(--signal); }
-    #heatmap-loading .hi { color: rgba(255,138,61,.55); }
     @media (max-width: 768px) { #bubble-idle { height: 260px; font-size: 10px; line-height: 12px; } }
 
     #bubble-canvas {
@@ -320,7 +317,7 @@
     .bar i { display: block; height: 100%; background: var(--ink-2); }
     .fail { color: var(--err); }
     .more { margin-top: 14px; }
-    #bubble-controls[hidden], #heatmap-loading[hidden] { display: none; }
+    #bubble-controls[hidden] { display: none; }
     #bubble-controls { display: flex; align-items: center; gap: 8px; padding: 10px 24px 0; font-size: 13px; color: var(--ink-3); }
     @media (max-width: 768px) {
       .section { padding: 16px; }
@@ -328,96 +325,6 @@
       .tools input[type=search] { width: 100%; }
     }
 
-    /* ── Heatmap ─────────────────────────────────────────────────────────── */
-    #heatmap-wrap {
-      width: min(1200px, 100%);
-      margin-top: 16px;
-      border: 1px solid var(--line-2);
-      background: var(--surface);
-      border-radius: var(--radius);
-      padding: 18px 24px 24px;
-      display: none;
-    }
-    #heatmap-wrap.visible { display: block; }
-
-    #heatmap-label { margin-bottom: 14px; }
-
-    #heatmap-placeholder {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--ink-3);
-    }
-
-    #heatmap-chart { display: none; overflow-x: auto; }
-
-    .heatmap-inner { display: inline-block; }
-
-    .heatmap-month-row {
-      position: relative;
-      height: 16px;
-      margin-bottom: 4px;
-    }
-
-    .heatmap-month {
-      position: absolute;
-      font: 500 10px var(--mono);
-      letter-spacing: 0.10em;
-      color: var(--ink-3);
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .heatmap-grid {
-      display: flex;
-      gap: 3px;
-    }
-
-    .heatmap-col {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .heatmap-cell {
-      width: 13px;
-      height: 13px;
-      border-radius: 2px;
-      flex-shrink: 0;
-    }
-
-    .heatmap-legend {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 10px;
-      font: 500 10px var(--mono);
-      color: var(--ink-3);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .heatmap-cell.out { background: transparent !important; outline: 1px dashed var(--line-2); outline-offset: -1px; }
-    #heatmap-note { font-size: 13px; color: var(--ink-3); margin: -4px 0 14px; max-width: 80ch; }
-    .legend-cell {
-      width: 13px;
-      height: 13px;
-      border-radius: 2px;
-      flex-shrink: 0;
-    }
-
-    #heatmap-tooltip {
-      position: fixed;
-      display: none;
-      background: var(--ink);
-      color: var(--bg);
-      font-family: var(--mono);
-      font-size: 12px;
-      padding: 5px 12px;
-      border-radius: var(--radius);
-      pointer-events: none;
-      z-index: 1000;
-      white-space: nowrap;
-    }
   </style>
 </head>
 <body>
@@ -467,8 +374,8 @@
       <div id="bubble-controls" class="tools" hidden>
         <label for="bubble-top">Show</label>
         <select id="bubble-top">
-          <option value="10">Top 10 tokens</option>
-          <option value="25" selected>Top 25 tokens</option>
+          <option value="10" selected>Top 10 tokens</option>
+          <option value="25">Top 25 tokens</option>
           <option value="50">Top 50 tokens</option>
         </select>
       </div>
@@ -509,13 +416,6 @@
     <button class="ghost-btn more" id="hold-more" type="button" hidden></button>
   </section>
 
-  <div id="heatmap-wrap">
-    <span id="heatmap-label">Transaction Activity</span>
-    <p id="heatmap-note"></p>
-    <div id="heatmap-placeholder">Run analysis to see activity</div>
-    <pre id="heatmap-loading" aria-hidden="true" hidden></pre>
-    <div id="heatmap-chart"></div>
-  </div>
   <section id="tx-wrap" class="section" aria-labelledby="tx-h">
     <div class="sec-head">
       <div>
@@ -531,7 +431,6 @@
     </div>
     <button class="ghost-btn more" id="tx-more" type="button" hidden></button>
   </section>
-  <div id="heatmap-tooltip"></div>
 
   <script>
     const DEFAULT    = 'H8BgJgae6qhMtf7BM2JtddywSQt11WdxHHxkGLNX5hss';
@@ -619,7 +518,6 @@
         const data = await fetchWallet(addr, inflight.signal);
         stopLoading();
         showHoldings(addr, data.holdings || []);
-        showHeatmap(data.activity);
         showTransactions(data.transactions);
       } catch (e) {
         if (e.name === 'AbortError') return;
@@ -628,7 +526,6 @@
         ph.textContent = e.message;
         ph.classList.add('error');
         document.getElementById('bubble-wallet').textContent = shortAddr(addr);
-        document.getElementById('heatmap-wrap').classList.remove('visible');
       } finally {
         enterBtn.disabled    = false;
         enterBtn.textContent = 'Enter';
@@ -671,13 +568,6 @@
     function resetView(addr) {
       document.getElementById('summary-bar').classList.remove('visible');
 
-      const hw = document.getElementById('heatmap-wrap');
-      hw.classList.add('visible');
-      document.getElementById('heatmap-chart').style.display = 'none';
-      const hp = document.getElementById('heatmap-placeholder');
-      hp.style.display = 'block';
-      hp.textContent = 'Loading activity…';
-
       disposeBubbles();
       const canvas = document.getElementById('bubble-canvas');
       const placeholder = document.getElementById('bubble-placeholder');
@@ -690,22 +580,19 @@
       document.getElementById('bubble-controls').hidden = true;
       document.getElementById('holdings-wrap').classList.remove('visible');
       document.getElementById('tx-wrap').classList.remove('visible');
-      document.getElementById('heatmap-note').textContent = '';
       startLoading();
     }
 
-    // ── Loading state: faster ASCII ring + heatmap wave + seconds counter ────
+    // ── Loading state: faster ASCII ring + seconds counter ────────────────
     let loadingTimer = 0, loadingNote = '';
     function startLoading() {
       const t0 = Date.now();
       loadingNote = '';
       setAscii('loading');
-      heatLoader.start();
       const tick = () => {
         const sec = Math.floor((Date.now() - t0) / 1000);
         const suffix = sec >= 2 ? ` ${sec}s` : '';
         document.getElementById('bubble-placeholder').textContent = (loadingNote || 'Loading holdings') + '…' + suffix;
-        document.getElementById('heatmap-placeholder').textContent = (loadingNote || 'Loading activity') + '…' + suffix;
       };
       clearInterval(loadingTimer);
       tick();
@@ -714,7 +601,6 @@
     function stopLoading() {
       clearInterval(loadingTimer);
       setAscii(null);
-      heatLoader.stop();
     }
 
     function showHoldings(addr, holdings) {
@@ -838,12 +724,12 @@
       // Layout: biggest in the middle, the rest placed outward along a golden-angle spiral,
       // each at the first spot where it doesn't touch anything already placed.
       const placed = [];
-      const GAP = 0.45;
+      const GAP = 1.6;   // room between bubbles for their labels
       // Tokens by size first; the two group bubbles go last, on the outside
       [...items].sort((a, b) => (a.kind !== 'token') - (b.kind !== 'token') || b.size - a.size).forEach((it, k) => {
         if (k === 0) { it.x = 0; it.z = 0; placed.push(it); return; }
         for (let step = 1; ; step++) {
-          const r = 0.9 * Math.sqrt(step), a = step * 2.39996;
+          const r = 1.3 * Math.sqrt(step), a = step * 2.39996;
           const x = Math.cos(a) * r, z = Math.sin(a) * r;
           if (placed.every(p => Math.hypot(p.x - x, p.z - z) > p.size + it.size + GAP)) { it.x = x; it.z = z; break; }
         }
@@ -852,7 +738,6 @@
       const extent = Math.max(4, ...placed.map(p => Math.hypot(p.x, p.z) + p.size));
 
       const clickable = [];
-      const LABELS = 12;   // only the biggest get labels; click any bubble for its details
       placed.forEach((it, rank) => {
         const priced = it.value != null;
         const color  = it.kind === 'noprice' ? 0x3A2A20 : it.kind === 'other' ? 0x2A2A33 : (priced ? 0x3A3A44 : 0x3A2A20);
@@ -876,11 +761,12 @@
         wire.position.copy(mesh.position);
         scene.add(wire);
 
-        if (rank < LABELS || it.kind !== 'token') {
+        {   // every bubble is labelled; text scales with the bubble but stays readable
           const sub = it.kind === 'noprice' ? 'see table'
-            : it.value != null ? `$${fmtAmt(it.value)}` : `${fmtAmt(it.token.amount)} tokens`;
+            : it.value != null ? `$${fmtShort(it.value)}` : `${fmtShort(it.token.amount)} tokens`;
           const label = makeLabel(it.label, sub);
-          const ls = Math.max(1, extent / 7);   // labels grow with the layout so they stay readable
+          const phone = wrap.clientWidth < 600 ? 1.5 : 1;   // narrow canvas: bigger text
+          const ls = Math.max(1, extent / 7) * (0.7 + 0.3 * it.size / maxSize) * phone;
           label.scale.multiplyScalar(ls);
           label.position.set(mesh.position.x, mesh.position.y + it.size + 0.45 * ls, mesh.position.z);
           scene.add(label);
@@ -914,8 +800,8 @@
         // Fit the whole layout at any screen width, looking down at it at an angle
         const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
         const halfW = Math.atan(Math.tan(halfV) * camera.aspect);
-        const dist  = (extent * 0.98 + 1) / Math.tan(Math.min(halfV, halfW));
-        camera.position.set(0, 0.75, 1).normalize().multiplyScalar(dist);
+        const dist  = (extent * 0.92 + 1.5) / Math.tan(Math.min(halfV, halfW));
+        camera.position.set(0, 1.5, 1).normalize().multiplyScalar(dist);   // look down more: fills the box, fewer hidden labels
         renderer.setSize(W, H, false);
       };
       const ro = new ResizeObserver(resize);
@@ -933,7 +819,7 @@
     }
 
     // ── Holdings table: every token, searchable and sortable ────────────────
-    const TABLE_PAGE = 100;
+    const TABLE_PAGE = 10;   // top 10 first; "Show all" lists the rest
     let sortKey = 'usd_value', sortDir = -1, showAllRows = false;
     const holdFilter = document.getElementById('hold-filter');
     const holdHide   = document.getElementById('hold-hide');
@@ -980,7 +866,7 @@
 
       const more = document.getElementById('hold-more');
       more.hidden = showAllRows || rows.length <= TABLE_PAGE;
-      more.textContent = `Show all ${rows.length.toLocaleString('en-US')}`;
+      more.textContent = `Show all ${rows.length.toLocaleString('en-US')} tokens`;
 
       document.querySelectorAll('#holdings-wrap th button').forEach(b => {
         const base = b.textContent.replace(/ [↑↓]$/, '');
@@ -1056,6 +942,15 @@
       }).join('');
     }
 
+    // Short form for map labels: $983K, $1.2M, $45.10
+    function fmtShort(v) {
+      const a = Math.abs(v);
+      if (a >= 1e9) return (v / 1e9).toFixed(1) + 'B';
+      if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+      if (a >= 1e4) return Math.round(v / 1e3) + 'K';
+      return fmtAmt(v);
+    }
+
     function fmtAmt(val) {
       const abs  = Math.abs(val);
       const sign = val < 0 ? '-' : '';
@@ -1113,143 +1008,6 @@
       sprite.scale.set(3.2, 1, 1);
       return sprite;
     }
-
-    // ── Heatmap (UTC days, matching how the server counts them) ──────────────
-    const HEAT_COLORS = ['#17171D', 'rgba(255,138,61,.28)', 'rgba(255,138,61,.5)', 'rgba(255,138,61,.75)', '#FF8A3D'];
-
-    function heatColor(count, max) {
-      if (count === 0) return HEAT_COLORS[0];
-      const ratio = count / max;
-      if (ratio <= 0.25) return HEAT_COLORS[1];
-      if (ratio <= 0.50) return HEAT_COLORS[2];
-      if (ratio <= 0.75) return HEAT_COLORS[3];
-      return HEAT_COLORS[4];
-    }
-
-    function showHeatmap(activity) {
-      const placeholder = document.getElementById('heatmap-placeholder');
-      if (!activity) { placeholder.textContent = "Couldn't load trading activity."; return; }
-      if (!activity.count) { placeholder.textContent = 'No transactions found.'; return; }
-      const since = activity.since;
-      const n = activity.count.toLocaleString('en-US');
-      document.getElementById('heatmap-note').textContent = activity.capped
-        ? `Every transaction per day (UTC), not only trades. This wallet is very busy: the latest ${n} transactions only reach back to ${since}, so dashed days before that weren't counted.`
-        : `Every transaction per day (UTC), not only trades: ${n} in the past year.`;
-      renderHeatmap(activity.days || {}, activity.capped ? since : null);
-    }
-
-    function renderHeatmap(data, countedFrom) {
-      const chart       = document.getElementById('heatmap-chart');
-      const placeholder = document.getElementById('heatmap-placeholder');
-
-      // Build 52-week window ending today (UTC)
-      const DAY   = 864e5;
-      const now   = new Date();
-      const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-      const startSunday = today - (new Date(today).getUTCDay() + 52 * 7) * DAY;
-
-      // Build array of week arrays
-      const weeks = [];
-      for (let t = startSunday; t <= today; t += 7 * DAY) {
-        const week = [];
-        for (let d = 0; d < 7 && t + d * DAY <= today; d++) week.push(new Date(t + d * DAY));
-        weeks.push(week);
-      }
-
-      const maxCount = Math.max(1, ...Object.values(data).map(Number));
-      const monthName = d => d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-
-      const inner = document.createElement('div');
-      inner.className = 'heatmap-inner';
-
-      // Month label row
-      const monthRow = document.createElement('div');
-      monthRow.className = 'heatmap-month-row';
-      const CELL_STEP = 16; // 13px cell + 3px gap
-
-      const firstLabel = document.createElement('span');
-      firstLabel.className = 'heatmap-month';
-      firstLabel.style.left = '0px';
-      firstLabel.textContent = monthName(weeks[0][0]);
-      monthRow.appendChild(firstLabel);
-
-      let lastLabelX = 0;
-      weeks.forEach((week, wi) => {
-        if (wi === 0) return;
-        const prevMonth = weeks[wi - 1][0].getUTCMonth();
-        const curMonth  = week[0].getUTCMonth();
-        const x = wi * CELL_STEP;
-        if (curMonth !== prevMonth && x - lastLabelX >= 28) {
-          const lbl = document.createElement('span');
-          lbl.className  = 'heatmap-month';
-          lbl.style.left = x + 'px';
-          lbl.textContent = monthName(week[0]);
-          monthRow.appendChild(lbl);
-          lastLabelX = x;
-        }
-      });
-      inner.appendChild(monthRow);
-
-      // Cell grid
-      const grid = document.createElement('div');
-      grid.className = 'heatmap-grid';
-
-      weeks.forEach(week => {
-        const col = document.createElement('div');
-        col.className = 'heatmap-col';
-        week.forEach(date => {
-          const dateStr = date.toISOString().slice(0, 10);
-          const count   = data[dateStr] || 0;
-          const cell    = document.createElement('div');
-          cell.className        = 'heatmap-cell' + (countedFrom && dateStr < countedFrom ? ' out' : '');
-          cell.style.background = heatColor(count, maxCount);
-          cell.dataset.date     = dateStr;
-          cell.dataset.count    = count;
-          col.appendChild(cell);
-        });
-        grid.appendChild(col);
-      });
-      inner.appendChild(grid);
-
-      // Legend
-      const legend = document.createElement('div');
-      legend.className = 'heatmap-legend';
-      legend.innerHTML = `<span>Less</span>` +
-        HEAT_COLORS.map(c => `<div class="legend-cell" style="background:${c}"></div>`).join('') +
-        `<span>More</span>`;
-      inner.appendChild(legend);
-
-      chart.innerHTML = '';
-      chart.appendChild(inner);
-
-      placeholder.style.display = 'none';
-      chart.style.display = 'block';
-      chart.scrollLeft = chart.scrollWidth;   // newest weeks visible on narrow screens
-    }
-
-    // Tooltip listeners are attached once, not on every render.
-    (function () {
-      const chart   = document.getElementById('heatmap-chart');
-      const tooltip = document.getElementById('heatmap-tooltip');
-      chart.addEventListener('mouseover', e => {
-        const cell = e.target.closest('.heatmap-cell');
-        if (!cell) { tooltip.style.display = 'none'; return; }
-        const count = parseInt(cell.dataset.count);
-        const d     = new Date(cell.dataset.date + 'T12:00:00Z');
-        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-        tooltip.textContent = cell.classList.contains('out')
-          ? `${label} — not counted (outside the data window)`
-          : count > 0
-            ? `${label} — ${count} transaction${count !== 1 ? 's' : ''}`
-            : `${label} — No activity`;
-        tooltip.style.display = 'block';
-      });
-      chart.addEventListener('mousemove', e => {
-        tooltip.style.left = (e.clientX + 14) + 'px';
-        tooltip.style.top  = (e.clientY - 36) + 'px';
-      });
-      chart.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
-    })();
 
     function showHoldingDetail(holding) {
       const isStable = STABLECOINS.has(holding.symbol);
@@ -1373,34 +1131,6 @@
       if (mode) startIdle(); else { cancelAnimationFrame(idleRaf); idleRaf = 0; lastT = 0; }
     }
 
-    // Heatmap loader: a wave of ASCII "activity" sweeping across a 7-row grid
-    const heatLoader = (() => {
-      const el = document.getElementById('heatmap-loading');
-      let raf = 0, on = false;
-      function frame(t) {
-        const cw = 7.2;
-        const cols = Math.max(20, Math.min(106, Math.floor(el.clientWidth / cw)));
-        const lines = [];
-        for (let y = 0; y < 7; y++) {
-          let out = '';
-          for (let x = 0; x < cols; x++) {
-            if (x % 2) { out += ' '; continue; }                     // gaps like the real grid
-            const w = Math.sin(x * 0.11 - t * 0.004 + y * 0.35);
-            const n = Math.sin(x * 12.9898 + y * 78.233) * 0.5 + 0.5; // fixed per-cell texture
-            const v = Math.max(0, w) * (0.55 + 0.45 * n);
-            const ch = RAMP[Math.max(1, Math.round(v * 6))];
-            out += v > 0.75 ? `<span class="sig">${ch}</span>` : v > 0.45 ? `<span class="hi">${ch}</span>` : ch;
-          }
-          lines.push(out);
-        }
-        el.innerHTML = lines.join('\n');
-        raf = on && !reduceMotion.matches ? requestAnimationFrame(frame) : 0;
-      }
-      return {
-        start() { on = true; el.hidden = false; if (!raf) raf = requestAnimationFrame(frame); },
-        stop()  { on = false; el.hidden = true; cancelAnimationFrame(raf); raf = 0; },
-      };
-    })();
     new IntersectionObserver(([e]) => { idleVisible = e.isIntersecting; if (idleVisible) startIdle(); }).observe(idleEl);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) startIdle(); });
     window.addEventListener('resize', () => { if (asciiMode) idleFrame(performance.now()); });

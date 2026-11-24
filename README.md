@@ -2,7 +2,7 @@
 
 Live: https://solanawallettransactions.onrender.com
 
-Paste a Solana wallet: see its holdings as a 3D bubble map, its value, and a year of trading activity.<br>
+Paste a Solana wallet: see its holdings as a 3D bubble map, every token in a searchable list, and its latest transactions.<br>
 From this
 
 <img width="699" height="325" alt="sql" src="https://github.com/user-attachments/assets/05f9b033-57c7-44f2-934f-f5343fa46503" />
@@ -11,7 +11,7 @@ From this
 
 Tech Stack: Python 3.x · Helius DAS (`searchAssets`) + Enhanced Transactions API · Jupiter Price API v3 · Three.js
 
-Features: Live holdings, names and USD prices in one Helius call (Jupiter fills in prices Helius lacks) · 3D bubble map of token holdings · Clickable token detail panel · Stats: Total Value, SOL Balance, Token Balance · 52-week trading activity heatmap (last 500 transactions)
+Features: Live holdings, names and USD prices in one Helius call (Jupiter fills in prices Helius lacks) · 3D bubble map of token holdings · Clickable token detail panel · Stats: Total Value, SOL Balance, Token Balance · Top-10 map with group bubbles for big wallets · Holdings table with search, sort and CSV · Latest 100 transactions
 
 ## Run locally
 

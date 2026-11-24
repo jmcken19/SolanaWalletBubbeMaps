@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import collections
-import datetime
 import json
 import os
 import re
@@ -125,40 +124,7 @@ def get_holdings(wallet):
     return holdings
 
 
-SIG_PAGES = 5            # getSignaturesForAddress pages of 1,000 (5,000 transactions max)
 RECENT_TXNS = 100        # transactions listed with type and description
-
-
-def get_activity(wallet):
-    """Successful transactions per UTC day over the past year, from getSignaturesForAddress
-    (every transaction that touched the wallet, not just trades). Busy wallets hit the page cap
-    first: `since` says how far back the counts really go, `capped` says the cap was hit."""
-    cutoff = time.time() - 366 * 86400
-    days = collections.Counter()
-    count, oldest, before, capped = 0, None, None, False
-    for page in range(SIG_PAGES):
-        opts = {"limit": 1000}
-        if before:
-            opts["before"] = before
-        sigs = _rpc("getSignaturesForAddress", [wallet, opts]) or []
-        reached_cutoff = False
-        for x in sigs:
-            bt = x.get("blockTime")
-            if bt is None:
-                continue
-            if bt < cutoff:
-                reached_cutoff = True
-                break
-            oldest = bt
-            if x.get("err") is None:
-                days[datetime.datetime.fromtimestamp(bt, datetime.timezone.utc).strftime("%Y-%m-%d")] += 1
-                count += 1
-        if reached_cutoff or len(sigs) < 1000:
-            break
-        before = sigs[-1]["signature"]
-        capped = page == SIG_PAGES - 1
-    since = datetime.datetime.fromtimestamp(oldest, datetime.timezone.utc).strftime("%Y-%m-%d") if oldest else None
-    return {"days": dict(days), "count": count, "capped": capped, "since": since}
 
 
 def get_recent(wallet):
@@ -185,22 +151,17 @@ def wallet_report(wallet):
         if hit and hit[0] > now:
             return hit[1]
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=2) as pool:
         holdings_f = pool.submit(get_holdings, wallet)
-        activity_f = pool.submit(get_activity, wallet)
         recent_f = pool.submit(get_recent, wallet)
         holdings = holdings_f.result()
-        activity = recent = None   # still show holdings if history fails
-        try:
-            activity = activity_f.result()
-        except Exception:
-            _log_error()
+        recent = None   # still show holdings if the transaction list fails
         try:
             recent = recent_f.result()
         except Exception:
             _log_error()
 
-    payload = {"address": wallet, "holdings": holdings, "activity": activity, "transactions": recent}
+    payload = {"address": wallet, "holdings": holdings, "transactions": recent}
     with _cache_lock:
         if len(_cache) > 500:
             _cache.clear()
