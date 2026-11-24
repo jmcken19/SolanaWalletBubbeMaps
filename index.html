@@ -164,6 +164,15 @@
     }
     #bubble-placeholder.error { color: var(--err); }
 
+    /* Idle state: an ASCII bubble map turning slowly until the first lookup */
+    #bubble-idle {
+      display: block; margin: 0; padding: 8px 24px 24px; height: 340px; overflow: hidden;
+      font: 500 12px/14px var(--mono); color: var(--ink-3); white-space: pre; user-select: none;
+    }
+    #bubble-idle .hi { color: var(--ink); }
+    #bubble-idle .sig { color: var(--signal); }
+    @media (max-width: 768px) { #bubble-idle { height: 260px; font-size: 10px; line-height: 12px; } }
+
     #bubble-canvas {
       display: none;
       width: 100%;
@@ -394,6 +403,7 @@
       <span id="bubble-label">Bubble Map</span>
       <span id="bubble-wallet"></span>
       <div id="bubble-placeholder">Waiting for input...</div>
+      <pre id="bubble-idle" aria-hidden="true"></pre>
       <canvas id="bubble-canvas"></canvas>
       <div id="token-detail">
         <div id="token-detail-name"></div>
@@ -531,6 +541,7 @@
       placeholder.style.display = 'block';
       placeholder.classList.remove('error');
       placeholder.textContent   = 'Loading holdings…';
+      stopIdle();
       document.getElementById('bubble-wallet').textContent = `Loading ${shortAddr(addr)}…`;
       document.getElementById('token-detail').style.display = 'none';
     }
@@ -927,6 +938,92 @@
       document.getElementById('token-detail-grid').innerHTML = rows;
       document.getElementById('token-detail').style.display  = 'block';
     }
+
+    // ── Idle animation: an ASCII bubble map (same character ramp as the salary theme) ──
+    // Six shaded spheres turn on a tilted ring, lit from the top left like the 3D map.
+    // Runs only while visible and before the first lookup; one still frame with reduced motion.
+    const idleEl = document.getElementById('bubble-idle');
+    let idleRaf = 0, idleOn = true, idleVisible = true;
+    const RAMP = ' .:-=+*#%@';
+    const IDLE_BUBBLES = [   // radius (in rows), angle offset, colour class
+      { r: 4.2, a: 0.0, c: '' }, { r: 2.6, a: 1.05, c: '' }, { r: 3.4, a: 2.1, c: 'sig' },
+      { r: 1.8, a: 3.15, c: '' }, { r: 3.0, a: 4.2, c: '' }, { r: 2.2, a: 5.25, c: '' },
+    ];
+    const LIGHT = (() => { const v = [-0.5, -0.6, 0.62], m = Math.hypot(...v); return v.map(x => x / m); })();
+
+    function idleFrame(t) {
+      const style = getComputedStyle(idleEl);
+      const charW = parseFloat(style.fontSize) * 0.6, lineH = parseFloat(style.lineHeight);
+      const cols = Math.max(20, Math.floor((idleEl.clientWidth - 48) / charW));
+      const rows = Math.max(10, Math.floor((idleEl.clientHeight - 32) / lineH));
+      const ASPECT = lineH / charW;          // a row is ~2 columns tall
+      const cx = cols / 2, cy = rows / 2;
+      const R = Math.min(cols / ASPECT * 0.36, rows * 0.9);   // ring radius in rows
+
+      const chars = Array.from({ length: rows }, () => Array(cols).fill(' '));
+      const cls   = Array.from({ length: rows }, () => Array(cols).fill(''));
+      const depth = Array.from({ length: rows }, () => Array(cols).fill(-Infinity));
+
+      // Faint orbit line so the ring reads even between bubbles
+      for (let k = 0; k < 220; k++) {
+        const a = k / 220 * Math.PI * 2;
+        const x = Math.round(cx + Math.cos(a) * R * ASPECT), y = Math.round(cy + Math.sin(a) * R * 0.32);
+        if (y >= 0 && y < rows && x >= 0 && x < cols) chars[y][x] = '.';
+      }
+
+      const spin = t * 0.00018;
+      IDLE_BUBBLES.forEach((b, i) => {
+        const a = b.a + spin;
+        const z = Math.sin(a);                                   // -1 back .. 1 front
+        const scale = 0.78 + 0.22 * (z + 1) / 2;                 // nearer = bigger
+        const r = b.r * scale;
+        const bob = Math.sin(t * 0.0012 + i * 1.7) * 0.35;
+        const bx = cx + Math.cos(a) * R * ASPECT, by = cy + z * R * 0.32 + bob;
+        for (let y = Math.floor(by - r - 1); y <= Math.ceil(by + r + 1); y++) {
+          if (y < 0 || y >= rows) continue;
+          for (let x = Math.floor(bx - r * ASPECT - 1); x <= Math.ceil(bx + r * ASPECT + 1); x++) {
+            if (x < 0 || x >= cols) continue;
+            const nx = (x - bx) / (r * ASPECT), ny = (y - by) / r, d2 = nx * nx + ny * ny;
+            if (d2 > 1) continue;
+            const nz = Math.sqrt(1 - d2);
+            if (z + nz * 0.01 < depth[y][x]) continue;           // farther than what's drawn
+            const lit = Math.max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2]);
+            const edge = d2 > 0.82 ? 0.12 : 0;                    // soft rim
+            const v = Math.min(1, 0.3 + lit * 0.7 - edge);        // ambient keeps the shadow side visible
+            chars[y][x] = RAMP[Math.max(1, Math.min(RAMP.length - 1, Math.round(v * (RAMP.length - 1))))];
+            cls[y][x] = b.c || (v > 0.8 ? 'hi' : '');
+            depth[y][x] = z;
+          }
+        }
+      });
+
+      // Join runs of the same colour into spans (content is generated here, never user data)
+      idleEl.innerHTML = chars.map((row, y) => {
+        let out = '', cur = '', buf = '';
+        for (let x = 0; x < cols; x++) {
+          if (cls[y][x] !== cur) { out += cur ? `<span class="${cur}">${buf}</span>` : buf; cur = cls[y][x]; buf = ''; }
+          buf += row[x];
+        }
+        return out + (cur ? `<span class="${cur}">${buf}</span>` : buf);
+      }).join('\n');
+    }
+
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    function idleLoop(t) {
+      if (!idleOn || !idleVisible || document.hidden) { idleRaf = 0; return; }
+      idleFrame(t);
+      idleRaf = reduceMotion.matches ? 0 : requestAnimationFrame(idleLoop);
+    }
+    function startIdle() { if (!idleRaf && idleOn) idleRaf = requestAnimationFrame(idleLoop); }
+    function stopIdle() {
+      idleOn = false;
+      cancelAnimationFrame(idleRaf); idleRaf = 0;
+      idleEl.style.display = 'none';
+    }
+    new IntersectionObserver(([e]) => { idleVisible = e.isIntersecting; if (idleVisible) startIdle(); }).observe(idleEl);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) startIdle(); });
+    window.addEventListener('resize', () => { if (idleOn) idleFrame(performance.now()); });
+    (document.fonts ? document.fonts.ready : Promise.resolve()).then(startIdle);
   </script>
 </body>
 </html>
