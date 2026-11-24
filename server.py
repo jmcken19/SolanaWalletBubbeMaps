@@ -16,7 +16,7 @@ import time
 import traceback
 import urllib.request
 
-from config import API_KEY, JUPITER_API_KEY, PAGE_LIMIT, MAX_PAGES
+from config import API_KEY, BASE_URL, JUPITER_API_KEY
 
 SOL_MINT = "So11111111111111111111111111111111111111112"
 PRICE_CHUNK = 50          # mints per price request (keeps the URL short)
@@ -104,7 +104,9 @@ def get_holdings(wallet):
             "price": (ti.get("price_info") or {}).get("price_per_token"),
         })
 
-    missing = [e["mint"] for e in entries if e["price"] is None]
+    # Tokens Helius can't price are mostly spam airdrops; exchange wallets hold thousands.
+    # Ask Jupiter about the first 200 only (4 requests) so a lookup stays fast.
+    missing = [e["mint"] for e in entries if e["price"] is None][:200]
     if missing:
         jup = _jupiter_prices(missing)
         for e in entries:
@@ -123,16 +125,57 @@ def get_holdings(wallet):
     return holdings
 
 
+SIG_PAGES = 5            # getSignaturesForAddress pages of 1,000 (5,000 transactions max)
+RECENT_TXNS = 100        # transactions listed with type and description
+
+
 def get_activity(wallet):
-    """Transactions per UTC day across the wallet's most recent transactions."""
-    from helius import fetch_transactions
-    txns = fetch_transactions(wallet)
+    """Successful transactions per UTC day over the past year, from getSignaturesForAddress
+    (every transaction that touched the wallet, not just trades). Busy wallets hit the page cap
+    first: `since` says how far back the counts really go, `capped` says the cap was hit."""
+    cutoff = time.time() - 366 * 86400
     days = collections.Counter()
-    for t in txns:
-        ts = t.get("timestamp")
-        if ts:
-            days[datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime("%Y-%m-%d")] += 1
-    return {"days": dict(days), "count": len(txns), "capped": len(txns) >= PAGE_LIMIT * MAX_PAGES}
+    count, oldest, before, capped = 0, None, None, False
+    for page in range(SIG_PAGES):
+        opts = {"limit": 1000}
+        if before:
+            opts["before"] = before
+        sigs = _rpc("getSignaturesForAddress", [wallet, opts]) or []
+        reached_cutoff = False
+        for x in sigs:
+            bt = x.get("blockTime")
+            if bt is None:
+                continue
+            if bt < cutoff:
+                reached_cutoff = True
+                break
+            oldest = bt
+            if x.get("err") is None:
+                days[datetime.datetime.fromtimestamp(bt, datetime.timezone.utc).strftime("%Y-%m-%d")] += 1
+                count += 1
+        if reached_cutoff or len(sigs) < 1000:
+            break
+        before = sigs[-1]["signature"]
+        capped = page == SIG_PAGES - 1
+    since = datetime.datetime.fromtimestamp(oldest, datetime.timezone.utc).strftime("%Y-%m-%d") if oldest else None
+    return {"days": dict(days), "count": count, "capped": capped, "since": since}
+
+
+def get_recent(wallet):
+    """The latest transactions with Helius's type and plain-English description."""
+    url = f"{BASE_URL}/v0/addresses/{wallet}/transactions?api-key={API_KEY}&limit={RECENT_TXNS}"
+    out = []
+    for t in _http_json(url, timeout=15) or []:
+        out.append({
+            "signature": t.get("signature", ""),
+            "time": t.get("timestamp"),
+            "type": (t.get("type") or "UNKNOWN")[:32],
+            "source": (t.get("source") or "")[:32],
+            "description": (t.get("description") or "")[:240],
+            "fee": (t.get("fee") or 0) / 1e9,
+            "ok": t.get("transactionError") is None,
+        })
+    return out
 
 
 def wallet_report(wallet):
@@ -142,17 +185,22 @@ def wallet_report(wallet):
         if hit and hit[0] > now:
             return hit[1]
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         holdings_f = pool.submit(get_holdings, wallet)
         activity_f = pool.submit(get_activity, wallet)
+        recent_f = pool.submit(get_recent, wallet)
         holdings = holdings_f.result()
+        activity = recent = None   # still show holdings if history fails
         try:
             activity = activity_f.result()
         except Exception:
             _log_error()
-            activity = None   # still show holdings if history fails
+        try:
+            recent = recent_f.result()
+        except Exception:
+            _log_error()
 
-    payload = {"address": wallet, "holdings": holdings, "activity": activity}
+    payload = {"address": wallet, "holdings": holdings, "activity": activity, "transactions": recent}
     with _cache_lock:
         if len(_cache) > 500:
             _cache.clear()
@@ -174,6 +222,16 @@ def _log_error():
 class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+        try:
+            self._route()
+        except Exception:
+            _log_error()
+            try:
+                self._json(500, {"error": "Something went wrong on our side. Try again."})
+            except Exception:
+                pass   # client already gone
+
+    def _route(self):
         parsed = urlparse(self.path)
         if parsed.path in ("/", "/index.html"):
             self._serve_file("index.html", "text/html; charset=utf-8")

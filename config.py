@@ -12,7 +12,7 @@ BASE_URL = "https://api.helius.xyz"
 JUPITER_API_KEY = os.getenv("JUPITER_API_KEY")
 
 # ── Target wallet ────────────────────────────────────────────────────────────
-WALLET     = "FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP"
+WALLET     = "H8BgJgae6qhMtf7BM2JtddywSQt11WdxHHxkGLNX5hss"  # Binance Cold Wallet (Orb label); CLI default only
 
 # ── Supabase (PostgreSQL) ─────────────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL")   # set in .env and on Render

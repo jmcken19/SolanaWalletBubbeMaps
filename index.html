@@ -171,6 +171,9 @@
     }
     #bubble-idle .hi { color: var(--ink); }
     #bubble-idle .sig { color: var(--signal); }
+    #heatmap-loading { margin: 10px 0 0; font: 500 12px/14px var(--mono); color: var(--ink-3); white-space: pre; overflow: hidden; user-select: none; }
+    #heatmap-loading .sig { color: var(--signal); }
+    #heatmap-loading .hi { color: rgba(255,138,61,.55); }
     @media (max-width: 768px) { #bubble-idle { height: 260px; font-size: 10px; line-height: 12px; } }
 
     #bubble-canvas {
@@ -268,6 +271,63 @@
       .stat-cell:last-child { border-bottom: none; }
     }
 
+    /* ── Holdings + transactions sections ───────────────────────────────────── */
+    .section {
+      width: min(1200px, 100%); margin-top: 16px; border: 1px solid var(--line-2); background: var(--surface);
+      border-radius: var(--radius); padding: 18px 24px 24px; display: none;
+    }
+    .section.visible { display: block; }
+    .sec-label {
+      position: relative; display: inline-block; font: 500 12px/1.4 var(--mono); letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--ink-3); padding-bottom: 10px;
+    }
+    .sec-label::after { content: ""; position: absolute; left: 0; bottom: 0; width: 40px; height: 2px; background: var(--spectrum); }
+    .sec-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .sec-sub { font-size: 13px; color: var(--ink-3); margin-top: 8px; }
+    .tools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .tools input[type=search] {
+      min-height: 40px; width: 220px; max-width: 100%; padding: 0 12px; background: var(--bg-2); color: var(--ink);
+      border: 1px solid var(--line-2); border-radius: var(--radius); font: 400 14px var(--sans);
+    }
+    .tools input[type=search]:focus { outline: none; border-color: var(--ink-2); }
+    .tools label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+    .tools select {
+      min-height: 32px; background: var(--bg-2); color: var(--ink); border: 1px solid var(--line-2);
+      border-radius: var(--radius); font: 500 13px var(--sans); padding: 0 8px;
+    }
+    .ghost-btn {
+      min-height: 40px; padding: 0 14px; background: transparent; color: var(--ink); border: 1px solid var(--line-3);
+      border-radius: var(--radius); font: 600 13px var(--sans); cursor: pointer;
+    }
+    .ghost-btn:hover { border-color: var(--ink); }
+    .scroll { overflow-x: auto; }
+    .tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .tbl th {
+      text-align: left; font: 500 11px/1.4 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3);
+      padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+    }
+    .tbl th button { all: unset; cursor: pointer; }
+    .tbl th button:hover, .tbl th button:focus-visible { color: var(--ink); }
+    .tbl td { padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+    .tbl .r { text-align: right; }
+    .tbl td.r, .tbl td.m { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13px; }
+    .tbl td.desc { white-space: normal; color: var(--ink-2); min-width: 260px; }
+    .tbl tbody tr.click { cursor: pointer; }
+    .tbl tbody tr.click:hover { background: rgba(255,255,255,.035); }
+    .tsym { font-weight: 600; }
+    .tname { color: var(--ink-3); margin-left: 8px; font-size: 13px; }
+    .bar { display: inline-block; width: 56px; height: 4px; background: var(--line); vertical-align: middle; margin-left: 10px; }
+    .bar i { display: block; height: 100%; background: var(--ink-2); }
+    .fail { color: var(--err); }
+    .more { margin-top: 14px; }
+    #bubble-controls[hidden], #heatmap-loading[hidden] { display: none; }
+    #bubble-controls { display: flex; align-items: center; gap: 8px; padding: 10px 24px 0; font-size: 13px; color: var(--ink-3); }
+    @media (max-width: 768px) {
+      .section { padding: 16px; }
+      .hide-sm { display: none; }
+      .tools input[type=search] { width: 100%; }
+    }
+
     /* ── Heatmap ─────────────────────────────────────────────────────────── */
     #heatmap-wrap {
       width: min(1200px, 100%);
@@ -336,6 +396,8 @@
       text-transform: uppercase;
     }
 
+    .heatmap-cell.out { background: transparent !important; outline: 1px dashed var(--line-2); outline-offset: -1px; }
+    #heatmap-note { font-size: 13px; color: var(--ink-3); margin: -4px 0 14px; max-width: 80ch; }
     .legend-cell {
       width: 13px;
       height: 13px;
@@ -365,7 +427,7 @@
     <input
       id="wallet"
       type="text"
-      value="FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP"
+      value="H8BgJgae6qhMtf7BM2JtddywSQt11WdxHHxkGLNX5hss"
       spellcheck="false"
       autocomplete="off"
       aria-label="Wallet address"
@@ -402,6 +464,14 @@
     <div id="bubble-wrap">
       <span id="bubble-label">Bubble Map</span>
       <span id="bubble-wallet"></span>
+      <div id="bubble-controls" class="tools" hidden>
+        <label for="bubble-top">Show</label>
+        <select id="bubble-top">
+          <option value="10">Top 10 tokens</option>
+          <option value="25" selected>Top 25 tokens</option>
+          <option value="50">Top 50 tokens</option>
+        </select>
+      </div>
       <div id="bubble-placeholder">Waiting for input...</div>
       <pre id="bubble-idle" aria-hidden="true"></pre>
       <canvas id="bubble-canvas"></canvas>
@@ -413,15 +483,58 @@
   </div>
 
 
+  <section id="holdings-wrap" class="section" aria-labelledby="holdings-h">
+    <div class="sec-head">
+      <div>
+        <span class="sec-label" id="holdings-h">Holdings</span>
+        <p class="sec-sub" id="holdings-sub"></p>
+      </div>
+      <div class="tools">
+        <input type="search" id="hold-filter" placeholder="Search symbol, name or mint" aria-label="Search holdings">
+        <label><input type="checkbox" id="hold-hide"> Hide tokens with no price (often spam)</label>
+        <button class="ghost-btn" id="hold-csv" type="button">Download CSV</button>
+      </div>
+    </div>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr>
+          <th scope="col"><button data-sort="symbol">Token</button></th>
+          <th scope="col" class="r hide-sm"><button data-sort="amount">Amount</button></th>
+          <th scope="col" class="r hide-sm"><button data-sort="price_per_token">Price</button></th>
+          <th scope="col" class="r"><button data-sort="usd_value">Value ↓</button></th>
+        </tr></thead>
+        <tbody id="hold-body"></tbody>
+      </table>
+    </div>
+    <button class="ghost-btn more" id="hold-more" type="button" hidden></button>
+  </section>
+
   <div id="heatmap-wrap">
-    <span id="heatmap-label">Trading Activity</span>
+    <span id="heatmap-label">Transaction Activity</span>
+    <p id="heatmap-note"></p>
     <div id="heatmap-placeholder">Run analysis to see activity</div>
+    <pre id="heatmap-loading" aria-hidden="true" hidden></pre>
     <div id="heatmap-chart"></div>
   </div>
+  <section id="tx-wrap" class="section" aria-labelledby="tx-h">
+    <div class="sec-head">
+      <div>
+        <span class="sec-label" id="tx-h">Recent Transactions</span>
+        <p class="sec-sub">The latest 100, newest first. Times in UTC. Descriptions from Helius.</p>
+      </div>
+    </div>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Type</th><th scope="col">What happened</th><th scope="col" class="r">Link</th></tr></thead>
+        <tbody id="tx-body"></tbody>
+      </table>
+    </div>
+    <button class="ghost-btn more" id="tx-more" type="button" hidden></button>
+  </section>
   <div id="heatmap-tooltip"></div>
 
   <script>
-    const DEFAULT    = 'FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP';
+    const DEFAULT    = 'H8BgJgae6qhMtf7BM2JtddywSQt11WdxHHxkGLNX5hss';
     const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
     const SOL_MINT   = 'So11111111111111111111111111111111111111112';
     const STABLECOINS = new Set(['USDC', 'USDT', 'USDH']);
@@ -503,22 +616,53 @@
       resetView(addr);
 
       try {
-        const r = await fetch(`/api/wallet?address=${encodeURIComponent(addr)}`, { signal: inflight.signal });
-        const data = await r.json().catch(() => ({ error: "The server sent a reply we couldn't read. Try again." }));
-        if (!r.ok || data.error) throw new Error(data.error || 'Something went wrong. Try again.');
+        const data = await fetchWallet(addr, inflight.signal);
+        stopLoading();
         showHoldings(addr, data.holdings || []);
         showHeatmap(data.activity);
+        showTransactions(data.transactions);
       } catch (e) {
         if (e.name === 'AbortError') return;
-        const msg = e.message === 'Failed to fetch' ? "Couldn't reach the server. Check your connection and try again." : e.message;
+        stopLoading();
         const ph = document.getElementById('bubble-placeholder');
-        ph.textContent = msg;
+        ph.textContent = e.message;
         ph.classList.add('error');
         document.getElementById('bubble-wallet').textContent = shortAddr(addr);
         document.getElementById('heatmap-wrap').classList.remove('visible');
       } finally {
         enterBtn.disabled    = false;
         enterBtn.textContent = 'Enter';
+      }
+    }
+
+    // Our server always answers in JSON. Anything else (an HTML error page, a dropped
+    // connection) comes from Render while the service is waking up or restarting, so it's
+    // retried twice before showing a message.
+    const sleep = (ms, signal) => new Promise((res, rej) => {
+      const t = setTimeout(res, ms);
+      signal.addEventListener('abort', () => { clearTimeout(t); rej(new DOMException('Aborted', 'AbortError')); }, { once: true });
+    });
+
+    async function fetchWallet(addr, signal) {
+      const waits = [3000, 8000];
+      for (let attempt = 0; ; attempt++) {
+        let r, data;
+        try {
+          r = await fetch(`/api/wallet?address=${encodeURIComponent(addr)}`, { signal });
+          data = await r.json();
+        } catch (e) {
+          if (e.name === 'AbortError') throw e;
+          if (attempt < waits.length) {
+            loadingNote = 'The server is waking up, retrying';
+            await sleep(waits[attempt], signal);
+            continue;
+          }
+          throw new Error(r
+            ? `The server isn't answering properly right now (error ${r.status}). It may be restarting; try again in a minute.`
+            : "Couldn't reach the server. Check your connection and try again.");
+        }
+        if (!r.ok || data.error) throw new Error(data.error || `Something went wrong (error ${r.status}). Try again.`);
+        return data;
       }
     }
 
@@ -541,9 +685,36 @@
       placeholder.style.display = 'block';
       placeholder.classList.remove('error');
       placeholder.textContent   = 'Loading holdings…';
-      stopIdle();
       document.getElementById('bubble-wallet').textContent = `Loading ${shortAddr(addr)}…`;
       document.getElementById('token-detail').style.display = 'none';
+      document.getElementById('bubble-controls').hidden = true;
+      document.getElementById('holdings-wrap').classList.remove('visible');
+      document.getElementById('tx-wrap').classList.remove('visible');
+      document.getElementById('heatmap-note').textContent = '';
+      startLoading();
+    }
+
+    // ── Loading state: faster ASCII ring + heatmap wave + seconds counter ────
+    let loadingTimer = 0, loadingNote = '';
+    function startLoading() {
+      const t0 = Date.now();
+      loadingNote = '';
+      setAscii('loading');
+      heatLoader.start();
+      const tick = () => {
+        const sec = Math.floor((Date.now() - t0) / 1000);
+        const suffix = sec >= 2 ? ` ${sec}s` : '';
+        document.getElementById('bubble-placeholder').textContent = (loadingNote || 'Loading holdings') + '…' + suffix;
+        document.getElementById('heatmap-placeholder').textContent = (loadingNote || 'Loading activity') + '…' + suffix;
+      };
+      clearInterval(loadingTimer);
+      tick();
+      loadingTimer = setInterval(tick, 1000);
+    }
+    function stopLoading() {
+      clearInterval(loadingTimer);
+      setAscii(null);
+      heatLoader.stop();
     }
 
     function showHoldings(addr, holdings) {
@@ -552,7 +723,10 @@
         document.getElementById('bubble-placeholder').textContent = 'No holdings found.';
         return;
       }
-      renderBubbles(holdings);
+      currentAddr = addr;
+      allHoldings = holdings;
+      drawMap();
+      setupTable(holdings);
 
       const sol        = holdings.find(h => h.mint === SOL_MINT);
       const tokens     = holdings.filter(h => h.mint !== SOL_MINT);
@@ -594,7 +768,35 @@
       bubble = null;
     }
 
-    function renderBubbles(tokens) {
+    // ── Map state ────────────────────────────────────────────────────────────
+    let allHoldings = [], currentAddr = '';
+    const topSelect = document.getElementById('bubble-top');
+    topSelect.addEventListener('change', drawMap);
+
+    // Big wallets hold hundreds or thousands of tokens (mostly spam airdrops), which a map
+    // can't show. The map draws the top N by value and folds the rest into two group bubbles;
+    // the Holdings table below lists every token.
+    function drawMap() {
+      const topN = +topSelect.value;
+      const priced   = allHoldings.filter(h => h.usd_value != null);   // already sorted by value
+      const unpriced = allHoldings.filter(h => h.usd_value == null);
+      let shown, rest, noPrice;
+      if (priced.length) { shown = priced.slice(0, topN); rest = priced.slice(topN); noPrice = unpriced; }
+      else { shown = unpriced.slice(0, topN); rest = []; noPrice = unpriced.slice(topN); }
+
+      const items = shown.map(h => ({ kind: 'token', token: h, label: h.symbol, value: h.usd_value }));
+      if (rest.length) items.push({ kind: 'other', label: `+${rest.length.toLocaleString('en-US')} other`, value: rest.reduce((a, h) => a + h.usd_value, 0) });
+      if (noPrice.length) items.push({ kind: 'noprice', label: `${noPrice.length.toLocaleString('en-US')} no price`, value: null });
+      renderBubbles(items);
+
+      const total = allHoldings.length;
+      document.getElementById('bubble-wallet').textContent = total > shown.length
+        ? `${shortAddr(currentAddr)} · top ${shown.length} of ${total.toLocaleString('en-US')} tokens · full list below`
+        : shortAddr(currentAddr);
+      document.getElementById('bubble-controls').hidden = total <= 10;
+    }
+
+    function renderBubbles(items) {
       const placeholder = document.getElementById('bubble-placeholder');
       const canvas      = document.getElementById('bubble-canvas');
       const wrap        = document.getElementById('bubble-wrap');
@@ -607,9 +809,7 @@
 
       const scene    = new THREE.Scene();
       scene.background = new THREE.Color(0x111116);
-
-      const camera   = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
-
+      const camera   = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -622,83 +822,100 @@
       controls.enableDamping  = true;
       controls.dampingFactor  = 0.05;
       controls.autoRotate     = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-      controls.autoRotateSpeed = 0.6;
+      controls.autoRotateSpeed = 0.4;
 
-      const minSize  = 0.3;
-      const maxSize  = 2.0;
-      // Log scale so small holdings stay visible when one token dominates
-      const logVal    = v => v > 0 ? Math.log10(v + 1) : 0;
-      const knownVals = tokens.filter(t => t.usd_value != null).map(t => t.usd_value);
-      const maxLog = logVal((knownVals.length ? Math.max(...knownVals) : 1) || 1) || 1;
-
-      // Ring radius large enough that adjacent bubbles never touch
-      const gap  = 0.5;
-      const ring = tokens.length > 1
-        ? Math.max(10, (maxSize + gap) / Math.sin(Math.PI / tokens.length))
-        : 10;
-
-
-      const clickableMeshes = [];
-      const meshTokenMap    = new Map();
-
-      tokens.forEach((token, i) => {
-        const angle   = (i / tokens.length) * Math.PI * 2;
-        const priced  = token.usd_value != null;
-        const size    = priced ? minSize + (logVal(token.usd_value) / maxLog) * (maxSize - minSize) : minSize;
-
-        // Fill sphere — grey for priced tokens, warm tint for unpriced ones
-        const geo  = new THREE.SphereGeometry(size, 32, 32);
-        const mat  = new THREE.MeshStandardMaterial({
-          color:     priced ? 0x3A3A44 : 0x3A2A20,
-          roughness: priced ? 0.6 : 0.8,
-          metalness: 0,
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(Math.cos(angle) * ring, 0, Math.sin(angle) * ring);
-        scene.add(mesh);
-        clickableMeshes.push(mesh);
-        meshTokenMap.set(mesh.uuid, token);
-
-        // Wireframe overlay — more visible for unpriced tokens
-        const wfMat  = new THREE.MeshBasicMaterial({
-          color:       priced ? 0xEDEAE3 : 0xFF8A3D,
-          wireframe:   true,
-          transparent: true,
-          opacity:     priced ? 0.12 : 0.3,
-        });
-        const wfMesh = new THREE.Mesh(new THREE.SphereGeometry(size * 1.002, 16, 16), wfMat);
-        wfMesh.position.copy(mesh.position);
-        scene.add(wfMesh);
-
-        // Label sprite
-        const labelSub = priced ? `$${fmtAmt(token.usd_value)}` : `${fmtAmt(token.amount)} tokens`;
-        const label = makeLabel(token.symbol, labelSub);
-        label.position.set(mesh.position.x, mesh.position.y + size + 0.6, mesh.position.z);
-        scene.add(label);
+      // Size: log scale so small holdings stay visible next to a dominant one
+      // Size: half area-true (big holdings look big), half log (small ones stay visible)
+      const minSize = 0.35, maxSize = 2.6;
+      const logVal  = v => v > 0 ? Math.log10(v + 1) : 0;
+      const maxVal  = Math.max(1, ...items.filter(i => i.kind === 'token').map(i => i.value || 0));
+      const maxLog  = logVal(maxVal) || 1;
+      const sizeOf  = v => minSize + (maxSize - minSize) * Math.min(1, 0.5 * Math.sqrt(v / maxVal) + 0.5 * logVal(v) / maxLog);
+      items.forEach(i => {
+        i.size = i.kind === 'noprice' ? 0.8 : i.kind === 'other' ? Math.min(1.4, sizeOf(i.value)) : (i.value != null ? sizeOf(i.value) : minSize);
       });
 
-      // Click to drill down
+      // Layout: biggest in the middle, the rest placed outward along a golden-angle spiral,
+      // each at the first spot where it doesn't touch anything already placed.
+      const placed = [];
+      const GAP = 0.45;
+      // Tokens by size first; the two group bubbles go last, on the outside
+      [...items].sort((a, b) => (a.kind !== 'token') - (b.kind !== 'token') || b.size - a.size).forEach((it, k) => {
+        if (k === 0) { it.x = 0; it.z = 0; placed.push(it); return; }
+        for (let step = 1; ; step++) {
+          const r = 0.9 * Math.sqrt(step), a = step * 2.39996;
+          const x = Math.cos(a) * r, z = Math.sin(a) * r;
+          if (placed.every(p => Math.hypot(p.x - x, p.z - z) > p.size + it.size + GAP)) { it.x = x; it.z = z; break; }
+        }
+        placed.push(it);
+      });
+      const extent = Math.max(4, ...placed.map(p => Math.hypot(p.x, p.z) + p.size));
+
+      const clickable = [];
+      const LABELS = 12;   // only the biggest get labels; click any bubble for its details
+      placed.forEach((it, rank) => {
+        const priced = it.value != null;
+        const color  = it.kind === 'noprice' ? 0x3A2A20 : it.kind === 'other' ? 0x2A2A33 : (priced ? 0x3A3A44 : 0x3A2A20);
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(it.size, 32, 32),
+          new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0 })
+        );
+        mesh.position.set(it.x, Math.sin(rank * 1.7) * 0.25, it.z);
+        mesh.userData.item = it;
+        scene.add(mesh);
+        clickable.push(mesh);
+
+        const wire = new THREE.Mesh(
+          new THREE.SphereGeometry(it.size * 1.003, 16, 12),
+          new THREE.MeshBasicMaterial({
+            color: it.kind === 'token' && priced ? 0xEDEAE3 : 0xFF8A3D,
+            wireframe: true, transparent: true,
+            opacity: it.kind === 'token' && priced ? 0.12 : 0.3,
+          })
+        );
+        wire.position.copy(mesh.position);
+        scene.add(wire);
+
+        if (rank < LABELS || it.kind !== 'token') {
+          const sub = it.kind === 'noprice' ? 'see table'
+            : it.value != null ? `$${fmtAmt(it.value)}` : `${fmtAmt(it.token.amount)} tokens`;
+          const label = makeLabel(it.label, sub);
+          const ls = Math.max(1, extent / 7);   // labels grow with the layout so they stay readable
+          label.scale.multiplyScalar(ls);
+          label.position.set(mesh.position.x, mesh.position.y + it.size + 0.45 * ls, mesh.position.z);
+          scene.add(label);
+        }
+      });
+
+      // Click: a token opens its details, a group bubble jumps to the full list
       const ac = new AbortController();
       const raycaster = new THREE.Raycaster();
+      let downAt = null;
+      canvas.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; }, { signal: ac.signal });
       canvas.addEventListener('click', e => {
+        if (downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;   // was a drag
         const rect  = canvas.getBoundingClientRect();
         const mouse = new THREE.Vector2(
           ((e.clientX - rect.left)  / rect.width)  *  2 - 1,
           ((e.clientY - rect.top)   / rect.height) * -2 + 1
         );
         raycaster.setFromCamera(mouse, camera);
-        const hits = raycaster.intersectObjects(clickableMeshes);
-        if (hits.length > 0) showHoldingDetail(meshTokenMap.get(hits[0].object.uuid));
+        const hit = raycaster.intersectObjects(clickable)[0];
+        if (!hit) return;
+        const it = hit.object.userData.item;
+        if (it.kind === 'token') showHoldingDetail(it.token);
+        else jumpToTable(it.kind === 'noprice');
       }, { signal: ac.signal });
 
       const resize = () => {
         const W = wrap.clientWidth, H = canvas.clientHeight || 500;
         camera.aspect = W / H;
         camera.updateProjectionMatrix();
-        // Pull the camera back on narrow screens so the whole ring stays in frame
-        const halfW = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
-        const dist  = Math.max(ring * 1.9, (ring + maxSize + 1) / Math.tan(halfW));
-        camera.position.set(0, 0.18, 1).normalize().multiplyScalar(dist);
+        // Fit the whole layout at any screen width, looking down at it at an angle
+        const halfV = THREE.MathUtils.degToRad(camera.fov / 2);
+        const halfW = Math.atan(Math.tan(halfV) * camera.aspect);
+        const dist  = (extent * 0.98 + 1) / Math.tan(Math.min(halfV, halfW));
+        camera.position.set(0, 0.75, 1).normalize().multiplyScalar(dist);
         renderer.setSize(W, H, false);
       };
       const ro = new ResizeObserver(resize);
@@ -713,6 +930,130 @@
         controls.update();
         renderer.render(scene, camera);
       })();
+    }
+
+    // ── Holdings table: every token, searchable and sortable ────────────────
+    const TABLE_PAGE = 100;
+    let sortKey = 'usd_value', sortDir = -1, showAllRows = false;
+    const holdFilter = document.getElementById('hold-filter');
+    const holdHide   = document.getElementById('hold-hide');
+
+    function setupTable(holdings) {
+      const unpriced = holdings.filter(h => h.usd_value == null).length;
+      holdHide.checked = unpriced > 20;   // spam-heavy wallets start with no-price tokens hidden
+      holdFilter.value = '';
+      showAllRows = false;
+      document.getElementById('holdings-wrap').classList.add('visible');
+      renderTable();
+    }
+
+    function renderTable() {
+      const q = holdFilter.value.trim().toLowerCase();
+      const total = allHoldings.reduce((a, h) => a + (h.usd_value || 0), 0);
+      let rows = allHoldings.filter(h =>
+        (!holdHide.checked || h.usd_value != null) &&
+        (!q || h.symbol.toLowerCase().includes(q) || (h.name || '').toLowerCase().includes(q) || h.mint.toLowerCase().includes(q)));
+      rows = rows.slice().sort((a, b) => {
+        const va = a[sortKey], vb = b[sortKey];
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;               // missing values always last
+        if (vb == null) return -1;
+        return typeof va === 'string' ? va.localeCompare(vb) * sortDir : (va - vb) * sortDir;
+      });
+
+      const hidden = allHoldings.length - rows.length;
+      document.getElementById('holdings-sub').textContent =
+        `${rows.length.toLocaleString('en-US')} of ${allHoldings.length.toLocaleString('en-US')} tokens` +
+        (hidden && holdHide.checked && !q ? ` (${hidden.toLocaleString('en-US')} with no price hidden)` : '') +
+        '. Click a row for details.';
+
+      const visible = showAllRows ? rows : rows.slice(0, TABLE_PAGE);
+      document.getElementById('hold-body').innerHTML = visible.length ? visible.map(h => {
+        const pct = total > 0 && h.usd_value ? h.usd_value / total : 0;
+        return `<tr class="click" tabindex="0" data-mint="${esc(h.mint)}">
+          <td><span class="tsym">${esc(h.symbol)}</span><span class="tname">${esc(h.name)}</span></td>
+          <td class="r hide-sm">${fmtAmt(h.amount)}</td>
+          <td class="r hide-sm">${h.price_per_token != null ? '$' + fmtAmt(h.price_per_token) : '—'}</td>
+          <td class="r">${h.usd_value != null ? '$' + fmtAmt(h.usd_value) : '—'}<span class="bar" aria-hidden="true"><i style="width:${(pct * 100).toFixed(1)}%"></i></span></td>
+        </tr>`;
+      }).join('') : '<tr><td colspan="4" style="color:var(--ink-3)">No tokens match.</td></tr>';
+
+      const more = document.getElementById('hold-more');
+      more.hidden = showAllRows || rows.length <= TABLE_PAGE;
+      more.textContent = `Show all ${rows.length.toLocaleString('en-US')}`;
+
+      document.querySelectorAll('#holdings-wrap th button').forEach(b => {
+        const base = b.textContent.replace(/ [↑↓]$/, '');
+        b.textContent = b.dataset.sort === sortKey ? `${base} ${sortDir < 0 ? '↓' : '↑'}` : base;
+      });
+    }
+
+    holdFilter.addEventListener('input', () => { showAllRows = false; renderTable(); });
+    holdHide.addEventListener('change', () => { showAllRows = false; renderTable(); });
+    document.getElementById('hold-more').addEventListener('click', () => { showAllRows = true; renderTable(); });
+    document.querySelectorAll('#holdings-wrap th button').forEach(b => b.addEventListener('click', () => {
+      if (sortKey === b.dataset.sort) sortDir = -sortDir;
+      else { sortKey = b.dataset.sort; sortDir = sortKey === 'symbol' ? 1 : -1; }
+      renderTable();
+    }));
+    const openRow = tr => {
+      const h = allHoldings.find(x => x.mint === tr.dataset.mint);
+      if (!h) return;
+      showHoldingDetail(h);
+      document.getElementById('token-detail').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    document.getElementById('hold-body').addEventListener('click', e => { const tr = e.target.closest('tr[data-mint]'); if (tr) openRow(tr); });
+    document.getElementById('hold-body').addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const tr = e.target.closest('tr[data-mint]'); if (tr) { e.preventDefault(); openRow(tr); }
+    });
+
+    function jumpToTable(showNoPrice) {
+      if (showNoPrice) { holdHide.checked = false; sortKey = 'amount'; sortDir = -1; }
+      renderTable();
+      document.getElementById('holdings-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // CSV of every token. Cells that start with = + - @ are prefixed with ' so a spreadsheet
+    // never runs a token name as a formula (token names are set by whoever made the token).
+    document.getElementById('hold-csv').addEventListener('click', () => {
+      const cell = v => {
+        let t = v == null ? '' : String(v);
+        if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+        return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+      };
+      const lines = [['symbol', 'name', 'mint', 'amount', 'price_usd', 'value_usd'].join(',')]
+        .concat(allHoldings.map(h => [h.symbol, h.name, h.mint, h.amount, h.price_per_token, h.usd_value].map(cell).join(',')));
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `holdings-${currentAddr.slice(0, 6)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+
+    // ── Recent transactions ─────────────────────────────────────────────────
+    function showTransactions(txns) {
+      const wrap = document.getElementById('tx-wrap');
+      const body = document.getElementById('tx-body');
+      wrap.classList.add('visible');
+      if (!txns) { body.innerHTML = '<tr><td colspan="4" style="color:var(--ink-3)">Couldn\'t load recent transactions.</td></tr>'; return; }
+      if (!txns.length) { body.innerHTML = '<tr><td colspan="4" style="color:var(--ink-3)">No transactions found.</td></tr>'; return; }
+      const more = document.getElementById('tx-more');
+      more.hidden = txns.length <= 20;
+      more.textContent = `Show all ${txns.length}`;
+      more.onclick = () => { body.querySelectorAll('tr.later').forEach(r => r.hidden = false); more.hidden = true; };
+      body.innerHTML = txns.map((t, i) => {
+        const when = t.time ? new Date(t.time * 1000).toISOString().slice(0, 16).replace('T', ' ') : '—';
+        const type = t.type.replace(/_/g, ' ').toLowerCase();
+        const what = t.description || (t.source ? `${t.source.replace(/_/g, ' ').toLowerCase()} transaction` : '—');
+        return `<tr${i >= 20 ? ' class="later" hidden' : ''}>
+          <td class="m">${when}</td>
+          <td>${esc(type)}${t.ok ? '' : ' <span class="fail">failed</span>'}</td>
+          <td class="desc">${esc(what)}</td>
+          <td class="r"><a href="https://solscan.io/tx/${encodeURIComponent(t.signature)}" target="_blank" rel="noopener" style="color:var(--ink-2)">Solscan</a></td>
+        </tr>`;
+      }).join('');
     }
 
     function fmtAmt(val) {
@@ -789,10 +1130,15 @@
       const placeholder = document.getElementById('heatmap-placeholder');
       if (!activity) { placeholder.textContent = "Couldn't load trading activity."; return; }
       if (!activity.count) { placeholder.textContent = 'No transactions found.'; return; }
-      renderHeatmap(activity.days || {});
+      const since = activity.since;
+      const n = activity.count.toLocaleString('en-US');
+      document.getElementById('heatmap-note').textContent = activity.capped
+        ? `Every transaction per day (UTC), not only trades. This wallet is very busy: the latest ${n} transactions only reach back to ${since}, so dashed days before that weren't counted.`
+        : `Every transaction per day (UTC), not only trades: ${n} in the past year.`;
+      renderHeatmap(activity.days || {}, activity.capped ? since : null);
     }
 
-    function renderHeatmap(data) {
+    function renderHeatmap(data, countedFrom) {
       const chart       = document.getElementById('heatmap-chart');
       const placeholder = document.getElementById('heatmap-placeholder');
 
@@ -855,7 +1201,7 @@
           const dateStr = date.toISOString().slice(0, 10);
           const count   = data[dateStr] || 0;
           const cell    = document.createElement('div');
-          cell.className        = 'heatmap-cell';
+          cell.className        = 'heatmap-cell' + (countedFrom && dateStr < countedFrom ? ' out' : '');
           cell.style.background = heatColor(count, maxCount);
           cell.dataset.date     = dateStr;
           cell.dataset.count    = count;
@@ -891,9 +1237,11 @@
         const count = parseInt(cell.dataset.count);
         const d     = new Date(cell.dataset.date + 'T12:00:00Z');
         const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-        tooltip.textContent = count > 0
-          ? `${label} — ${count} trade${count !== 1 ? 's' : ''}`
-          : `${label} — No activity`;
+        tooltip.textContent = cell.classList.contains('out')
+          ? `${label} — not counted (outside the data window)`
+          : count > 0
+            ? `${label} — ${count} transaction${count !== 1 ? 's' : ''}`
+            : `${label} — No activity`;
         tooltip.style.display = 'block';
       });
       chart.addEventListener('mousemove', e => {
@@ -943,7 +1291,8 @@
     // Six shaded spheres turn on a tilted ring, lit from the top left like the 3D map.
     // Runs only while visible and before the first lookup; one still frame with reduced motion.
     const idleEl = document.getElementById('bubble-idle');
-    let idleRaf = 0, idleOn = true, idleVisible = true;
+    let idleRaf = 0, idleVisible = true, asciiMode = 'idle', phase = 0, lastT = 0;
+    const SPEED = { idle: 1, loading: 5 };
     const RAMP = ' .:-=+*#%@';
     const IDLE_BUBBLES = [   // radius (in rows), angle offset, colour class
       { r: 4.2, a: 0.0, c: '' }, { r: 2.6, a: 1.05, c: '' }, { r: 3.4, a: 2.1, c: 'sig' },
@@ -971,7 +1320,7 @@
         if (y >= 0 && y < rows && x >= 0 && x < cols) chars[y][x] = '.';
       }
 
-      const spin = t * 0.00018;
+      const spin = phase * 0.00018;
       IDLE_BUBBLES.forEach((b, i) => {
         const a = b.a + spin;
         const z = Math.sin(a);                                   // -1 back .. 1 front
@@ -1010,19 +1359,51 @@
 
     const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
     function idleLoop(t) {
-      if (!idleOn || !idleVisible || document.hidden) { idleRaf = 0; return; }
+      if (!asciiMode || !idleVisible || document.hidden) { idleRaf = 0; lastT = 0; return; }
+      phase += (lastT ? Math.min(100, t - lastT) : 0) * SPEED[asciiMode];
+      lastT = t;
       idleFrame(t);
       idleRaf = reduceMotion.matches ? 0 : requestAnimationFrame(idleLoop);
     }
-    function startIdle() { if (!idleRaf && idleOn) idleRaf = requestAnimationFrame(idleLoop); }
-    function stopIdle() {
-      idleOn = false;
-      cancelAnimationFrame(idleRaf); idleRaf = 0;
-      idleEl.style.display = 'none';
+    function startIdle() { if (!idleRaf && asciiMode) idleRaf = requestAnimationFrame(idleLoop); }
+    // 'idle' before the first lookup, 'loading' while one runs, null when the 3D map or an error shows
+    function setAscii(mode) {
+      asciiMode = mode;
+      idleEl.style.display = mode ? 'block' : 'none';
+      if (mode) startIdle(); else { cancelAnimationFrame(idleRaf); idleRaf = 0; lastT = 0; }
     }
+
+    // Heatmap loader: a wave of ASCII "activity" sweeping across a 7-row grid
+    const heatLoader = (() => {
+      const el = document.getElementById('heatmap-loading');
+      let raf = 0, on = false;
+      function frame(t) {
+        const cw = 7.2;
+        const cols = Math.max(20, Math.min(106, Math.floor(el.clientWidth / cw)));
+        const lines = [];
+        for (let y = 0; y < 7; y++) {
+          let out = '';
+          for (let x = 0; x < cols; x++) {
+            if (x % 2) { out += ' '; continue; }                     // gaps like the real grid
+            const w = Math.sin(x * 0.11 - t * 0.004 + y * 0.35);
+            const n = Math.sin(x * 12.9898 + y * 78.233) * 0.5 + 0.5; // fixed per-cell texture
+            const v = Math.max(0, w) * (0.55 + 0.45 * n);
+            const ch = RAMP[Math.max(1, Math.round(v * 6))];
+            out += v > 0.75 ? `<span class="sig">${ch}</span>` : v > 0.45 ? `<span class="hi">${ch}</span>` : ch;
+          }
+          lines.push(out);
+        }
+        el.innerHTML = lines.join('\n');
+        raf = on && !reduceMotion.matches ? requestAnimationFrame(frame) : 0;
+      }
+      return {
+        start() { on = true; el.hidden = false; if (!raf) raf = requestAnimationFrame(frame); },
+        stop()  { on = false; el.hidden = true; cancelAnimationFrame(raf); raf = 0; },
+      };
+    })();
     new IntersectionObserver(([e]) => { idleVisible = e.isIntersecting; if (idleVisible) startIdle(); }).observe(idleEl);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) startIdle(); });
-    window.addEventListener('resize', () => { if (idleOn) idleFrame(performance.now()); });
+    window.addEventListener('resize', () => { if (asciiMode) idleFrame(performance.now()); });
     (document.fonts ? document.fonts.ready : Promise.resolve()).then(startIdle);
   </script>
 </body>
