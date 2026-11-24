@@ -24,8 +24,9 @@ State after the 2026-11-24 cleanup, and what is left before showing it to people
 
 ## Open questions (James)
 - Rename the GitHub repo to `solana-wallet-bubble-map` (Settings > General > Repository name;
-  old links redirect). The Render URL is fixed when a service is created: a new service or a
-  custom domain is needed for a new URL.
+  old links redirect). The Render service is still named `solana-tracker` on purpose: renaming it in
+  render.yaml makes Render create a new service with a new URL. For a new URL, add a custom domain
+  or create a new service in the Render dashboard (and set the keys there).
 - Who it's for and how it makes money (see the product brainstorm in Studio-Repository
   `ideas/bubble-map.md`).
 - Keep or delete the Postgres CLI and `DATABASE_URL`.
