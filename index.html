@@ -109,6 +109,20 @@
     #enter:hover  { background: #fff; }
     #enter:disabled { opacity: .55; cursor: progress; }
 
+    /* ── Popular wallets ────────────────────────────────────────────────────── */
+    #popular { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+    #popular-label { display: block; font: 500 12px/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+    #popular-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pick {
+      display: inline-flex; align-items: baseline; gap: 8px; min-height: 40px; padding: 8px 12px;
+      background: transparent; color: var(--ink); border: 1px solid var(--line-2); border-radius: var(--radius);
+      font: 500 14px var(--sans); cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .pick:hover { border-color: var(--ink-2); background: var(--surface-2); }
+    .pick small { font: 400 12px var(--mono); color: var(--ink-3); }
+    #popular-note { margin-top: 10px; font-size: 12px; color: var(--ink-3); }
+    #popular-note a { color: var(--ink-2); }
+
     /* ── Side-by-side panel row ─────────────────────────────────────────────── */
     #panels {
       display: flex;
@@ -350,6 +364,11 @@
     >
     <p id="wallet-err" role="alert"></p>
     <button id="enter">Enter</button>
+    <div id="popular">
+      <span id="popular-label">Popular wallets</span>
+      <div id="popular-list"></div>
+      <p id="popular-note">Labels from the <a href="https://orbmarkets.io" target="_blank" rel="noopener">Orb</a> explorer (Helius).</p>
+    </div>
   </div>
 
   <div id="summary-bar">
@@ -426,6 +445,29 @@
     });
 
     enterBtn.addEventListener('click', run);
+
+    // ── Popular wallets ──────────────────────────────────────────────────────
+    // Only wallets with a public label; each source is linked from the button's title.
+    const POPULAR = [
+      { name: 'Binance Cold Wallet',   address: 'H8BgJgae6qhMtf7BM2JtddywSQt11WdxHHxkGLNX5hss' },
+      { name: 'Binance Cold Wallet 3', address: 'G9RCBaYb8aBRxoe8QBC2ucGrVqjuZFysRhY8d56cnNT1' },
+      { name: 'Coinbase Hot Wallet 3', address: 'FpwQQhQQoEaVu3WU2qZMfF1hx48YyfwsLoRgXG83E99Q' },
+      { name: 'Coinbase Hot Wallet 8', address: '4NyK1AdJBNbgaJ9EsKz3J4rfeHsuYdjkTPg3JaNdLeFw' },
+    ];
+    const popularList = document.getElementById('popular-list');
+    POPULAR.forEach(w => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick';
+      b.title = `${w.address} (label: orbmarkets.io/address/${w.address})`;
+      b.innerHTML = `${esc(w.name)} <small>${esc(w.address.slice(0, 4) + '…' + w.address.slice(-4))}</small>`;
+      b.addEventListener('click', () => {
+        input.value = w.address;
+        input.classList.add('active');
+        run();
+      });
+      popularList.appendChild(b);
+    });
 
     function showErr(msg) {
       errEl.textContent = msg;
@@ -584,7 +626,6 @@
         ? Math.max(10, (maxSize + gap) / Math.sin(Math.PI / tokens.length))
         : 10;
 
-      camera.position.set(0, ring * 0.35, ring * 1.9);
 
       const clickableMeshes = [];
       const meshTokenMap    = new Map();
@@ -643,6 +684,10 @@
         const W = wrap.clientWidth, H = canvas.clientHeight || 500;
         camera.aspect = W / H;
         camera.updateProjectionMatrix();
+        // Pull the camera back on narrow screens so the whole ring stays in frame
+        const halfW = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
+        const dist  = Math.max(ring * 1.9, (ring + maxSize + 1) / Math.tan(halfW));
+        camera.position.set(0, 0.18, 1).normalize().multiplyScalar(dist);
         renderer.setSize(W, H, false);
       };
       const ro = new ResizeObserver(resize);
