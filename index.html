@@ -1,598 +1,887 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Solana Tracker</title>
-<meta name="description" content="Paste a Solana wallet address to see what it holds, what it's worth, and when it trades.">
-<meta name="theme-color" content="#07070A">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307070A'/%3E%3Ccircle cx='12' cy='19' r='6' fill='%23EDEAE3'/%3E%3Ccircle cx='22' cy='11' r='4' fill='%23FF8A3D'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<style>
-/* Design tokens copied from jmcken19/salary (web/styles.css): near-black ground, warm off-white
-   ink, true dark greys. The spectrum appears once per section as a thin rule under labels;
-   data uses one colour, --signal. 8px spacing scale; 16px minimum text except mono labels. */
-:root {
-  --bg: #07070A; --bg-2: #0C0C10; --surface: #111116; --surface-2: #17171D; --field: #0C0C10;
-  --ink: #EDEAE3; --ink-2: #A9A7B0; --ink-3: #8E8C96;
-  --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.14); --line-3: rgba(255,255,255,.28);
-  --wash: rgba(255,255,255,.035);
-  --spectrum: linear-gradient(90deg, #FF4F7B, #FF8A3D, #F4E2B8, #5BB6FF);
-  --signal: #FF8A3D; --err: #FF9A85;
-  --display: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
-  --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --t-xs: .75rem;
-  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
-  --radius: 2px;
-  --ease: cubic-bezier(.2,.7,.2,1);
-  color-scheme: dark;
-}
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; background: var(--bg); }
-body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-body::after { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: .05; mix-blend-mode: screen;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-3); text-underline-offset: 3px; transition: color .2s, text-decoration-color .2s; }
-a:hover { color: #fff; text-decoration-color: currentColor; }
-:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 2px; }
-::selection { background: var(--ink); color: var(--bg); }
-h1, h2, h3, p, dl, dd { margin: 0; }
-h1, h2 { text-wrap: balance; }
-[hidden] { display: none !important; }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.wrap { max-width: 1200px; margin: 0 auto; padding-inline: max(var(--s6), env(safe-area-inset-left, 0px)) max(var(--s6), env(safe-area-inset-right, 0px)); }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solana Wallet Bubble Map</title>
+  <meta name="theme-color" content="#07070A">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    /* Colours and type from the salary repo's theme (web/styles.css). Layout is this app's own. */
+    :root {
+      --bg: #07070A; --bg-2: #0C0C10; --surface: #111116; --surface-2: #17171D;
+      --ink: #EDEAE3; --ink-2: #A9A7B0; --ink-3: #8E8C96;
+      --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.14); --line-3: rgba(255,255,255,.28);
+      --spectrum: linear-gradient(90deg, #FF4F7B, #FF8A3D, #F4E2B8, #5BB6FF);
+      --signal: #FF8A3D; --err: #FF9A85;
+      --display: "Archivo", "Helvetica Neue", Helvetica, sans-serif;
+      --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --radius: 2px;
+      color-scheme: dark;
+    }
 
-/* Type roles */
-.label { font: 500 var(--t-xs)/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
-.ruled { position: relative; display: inline-block; padding-bottom: var(--s3); }
-.ruled::after { content: ""; position: absolute; left: 0; bottom: 0; width: 48px; height: 2px; background: var(--spectrum); }
-.headline { font: 700 clamp(2.5rem, 6vw, 4.75rem)/.98 var(--display); font-stretch: 75%; letter-spacing: -.015em; }
-.lede { font-size: 1.25rem; line-height: 1.55; color: var(--ink-2); max-width: 44ch; }
-.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.dim { color: var(--ink-3); }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* Buttons */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); min-height: 48px; padding: 0 var(--s5); border-radius: var(--radius); border: 1px solid transparent; font: 600 16px/1 var(--sans); text-decoration: none; cursor: pointer; white-space: nowrap; transition: background .2s, border-color .2s, color .2s; }
-.btn.primary { background: var(--ink); color: var(--bg); }
-.btn.primary:hover { background: #fff; }
-.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line-3); }
-.btn.ghost:hover { border-color: var(--ink); color: #fff; }
-.btn.sm { min-height: 40px; padding: 0 var(--s4); font-size: 14px; }
-.btn:disabled { opacity: .55; cursor: progress; }
-.linkbtn { background: none; border: 0; padding: 0; color: var(--ink-2); font: inherit; text-decoration: underline; text-decoration-color: var(--line-3); text-underline-offset: 3px; cursor: pointer; }
-.linkbtn:hover { color: var(--ink); text-decoration-color: currentColor; }
+    html, body {
+      width: 100%; min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 80px;
+      padding-bottom: 200px;
+      padding-left: 16px;
+      padding-right: 16px;
+    }
 
-/* Nav */
-.nav { position: sticky; top: 0; z-index: 40; background: var(--bg); border-bottom: 1px solid var(--line); }
-.nav-in { height: 64px; display: flex; align-items: center; gap: var(--s6); }
-.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font: 700 1.375rem/1 var(--display); font-stretch: 75%; letter-spacing: .01em; }
-.brand:hover { color: var(--ink); }
-.logo-mark { width: 22px; height: 22px; flex: none; }
-.nav-meta { margin-left: auto; }
+    ::selection { background: var(--ink); color: var(--bg); }
+    :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-/* Lookup */
-.hero { padding-block: var(--s8) var(--s7); border-bottom: 1px solid var(--line); }
-.hero-in { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--s7); align-items: end; }
-.hero-copy { display: flex; flex-direction: column; gap: var(--s5); align-items: flex-start; }
-.lookup { background: var(--surface); border: 1px solid var(--line); padding: var(--s5); position: relative; }
-.corners i { position: absolute; width: 12px; height: 12px; border: 0 solid var(--ink-3); }
-.corners i:nth-child(1) { top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px; }
-.corners i:nth-child(2) { top: -1px; right: -1px; border-top-width: 1px; border-right-width: 1px; }
-.corners i:nth-child(3) { bottom: -1px; left: -1px; border-bottom-width: 1px; border-left-width: 1px; }
-.corners i:nth-child(4) { bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px; }
-.field { display: flex; flex-direction: column; gap: var(--s2); }
-.field label { color: var(--ink-2); }
-.field-row { display: flex; gap: var(--s2); }
-.field input { flex: 1; min-width: 0; min-height: 48px; padding: 0 var(--s4); border-radius: var(--radius); border: 1px solid var(--line-2); background: var(--field); color: var(--ink); font: 400 15px var(--mono); transition: border-color .2s; }
-.field input::placeholder { color: var(--ink-3); }
-.field input:hover { border-color: var(--line-3); }
-.field input:focus { border-color: var(--ink-2); outline: none; }
-.field input[aria-invalid=true] { border-color: var(--err); }
-.field-help { display: flex; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-top: var(--s3); font-size: 14px; color: var(--ink-3); }
-.field-error { color: var(--err); min-height: 1.6em; margin-top: var(--s2); font-size: 15px; }
+    /* Section labels: mono, tracked, with the thin spectrum rule */
+    #card-label, #bubble-label, #heatmap-label {
+      position: relative;
+      display: inline-block;
+      font: 500 12px/1.4 var(--mono);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      padding-bottom: 10px;
+    }
+    #card-label::after, #bubble-label::after, #heatmap-label::after {
+      content: ""; position: absolute; left: 0; bottom: 0; width: 40px; height: 2px; background: var(--spectrum);
+    }
 
-/* Results */
-.results { padding-block: var(--s7) var(--s9); display: grid; gap: var(--s5); }
-.res-head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--s4); flex-wrap: wrap; padding-bottom: var(--s5); border-bottom: 1px solid var(--line); }
-.res-addr { font: 500 1.125rem/1.3 var(--mono); word-break: break-all; margin-top: var(--s2); }
-.res-actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
-.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
-.kpis > div { padding: var(--s5); display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
-.kpis > div + div { border-left: 1px solid var(--line); }
-.kpis dd { font: 700 1.875rem/1.1 var(--display); font-stretch: 75%; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.kpis .sub { font-size: 14px; color: var(--ink-3); }
+    #card {
+      border: 1px solid var(--line-2);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 28px 32px 32px;
+      width: min(760px, 100%);
+      flex-shrink: 0;
+    }
 
-.grid2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--s5); }
-.panel { border: 1px solid var(--line); background: var(--surface); min-width: 0; display: flex; flex-direction: column; }
-.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4); flex-wrap: wrap; padding: var(--s5) var(--s5) var(--s4); }
-.panel-head h2 { font: 700 1.375rem/1.2 var(--display); font-stretch: 80%; }
-.panel-body { padding: 0 var(--s5) var(--s5); }
+    #card-label { margin-bottom: 18px; }
 
-#bubble-stage { position: relative; height: 480px; border-top: 1px solid var(--line); background: var(--bg-2); }
-#bubble-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-#bubble-canvas:active { cursor: grabbing; }
-.stage-hint { position: absolute; left: var(--s4); bottom: var(--s3); pointer-events: none; }
+    #wallet {
+      display: block;
+      width: 100%;
+      font-family: var(--mono);
+      font-size: 14px;
+      color: var(--ink-3);
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--line-2);
+      padding: 4px 0 8px;
+      outline: none;
+      letter-spacing: 0.01em;
+      transition: border-color 0.15s, color 0.15s;
+    }
 
-.detail { display: grid; gap: var(--s4); }
-.detail-sym { font: 700 2.25rem/1 var(--display); font-stretch: 75%; overflow-wrap: anywhere; }
-.detail-name { color: var(--ink-2); }
-.detail-desc { color: var(--ink-2); max-width: 48ch; }
-.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); border-top: 1px solid var(--line); }
-.kv dt, .kv dd { padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
-.kv dt { padding-right: var(--s5); }
-.kv dd { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
-.kv dd.addr { font-size: 13px; text-align: left; }
-.tag { display: inline-block; font: 500 var(--t-xs)/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); border: 1px solid var(--line-3); padding: 4px 6px 3px; border-radius: 2px; }
-.tag.sig { border-color: var(--signal); color: var(--signal); }
+    #wallet.active {
+      color: var(--ink);
+      border-bottom-color: var(--ink-2);
+    }
+    #wallet[aria-invalid=true] { border-bottom-color: var(--err); }
 
-/* Holdings table */
-.scroll { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
-th { text-align: left; font: 500 var(--t-xs)/1.4 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding: var(--s3) var(--s5); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); white-space: nowrap; }
-td { padding: var(--s3) var(--s5); border-bottom: 1px solid var(--line); white-space: nowrap; }
-th.r, td.r { text-align: right; }
-td.r { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-tbody tr { cursor: pointer; transition: background .15s; }
-tbody tr:hover { background: var(--wash); }
-tbody tr[aria-selected=true] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--signal); }
-.tsym { font-weight: 600; }
-.tname { color: var(--ink-3); margin-left: var(--s2); font-size: 14px; }
-.share { display: inline-block; width: 64px; height: 4px; background: var(--line); vertical-align: middle; margin-left: var(--s3); }
-.share i { display: block; height: 100%; background: var(--ink-2); }
+    #wallet-err { color: var(--err); font-size: 14px; min-height: 1.4em; margin-top: 8px; }
 
-/* Heatmap */
-.heat { overflow-x: auto; padding-bottom: var(--s2); }
-.heat-in { display: inline-block; }
-.heat-months { position: relative; height: 18px; margin-bottom: var(--s1); }
-.heat-months span { position: absolute; font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
-.heat-grid { display: flex; gap: 3px; }
-.heat-col { display: flex; flex-direction: column; gap: 3px; }
-.heat-cell { width: 12px; height: 12px; border-radius: 1px; background: var(--surface-2); }
-.heat-legend { display: flex; align-items: center; gap: 6px; margin-top: var(--s3); font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
-.heat-legend i { width: 12px; height: 12px; border-radius: 1px; }
-#tip { position: fixed; z-index: 60; pointer-events: none; background: var(--ink); color: var(--bg); font: 500 13px var(--mono); padding: 6px 10px; border-radius: 2px; white-space: nowrap; }
+    #enter {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      min-height: 44px;
+      background: var(--ink);
+      color: var(--bg);
+      border: none;
+      border-radius: var(--radius);
+      font: 600 15px/1 var(--sans);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
 
-/* Loading */
-.skel { background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 50%, var(--surface) 100%); background-size: 200% 100%; animation: skel 1.4s linear infinite; border: 1px solid var(--line); }
-@keyframes skel { to { background-position: -200% 0; } }
-.empty { padding: var(--s7) var(--s5); text-align: center; color: var(--ink-2); }
+    #enter:hover  { background: #fff; }
+    #enter:disabled { opacity: .55; cursor: progress; }
 
-.foot { border-top: 1px solid var(--line); background: var(--bg-2); padding-block: var(--s6); color: var(--ink-3); font-size: 14px; }
-.foot-in { display: flex; justify-content: space-between; gap: var(--s5); flex-wrap: wrap; }
+    /* ── Side-by-side panel row ─────────────────────────────────────────────── */
+    #panels {
+      display: flex;
+      gap: 16px;
+      width: min(1200px, 100%);
+      margin-top: 16px;
+      align-items: stretch;
+    }
 
-@media (max-width: 900px) {
-  .hero-in, .grid2 { grid-template-columns: minmax(0, 1fr); }
-  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .kpis > div:nth-child(3) { border-left: 0; }
-  .kpis > div:nth-child(n+3) { border-top: 1px solid var(--line); }
-}
-@media (max-width: 560px) {
-  .wrap { padding-inline: var(--s4); }
-  .hero { padding-block: var(--s6); }
-  .field-row { flex-direction: column; }
-  #bubble-stage { height: 360px; }
-  .kpis dd { font-size: 1.5rem; }
-  th, td { padding-inline: var(--s3); }
-  .share, .tname { display: none; }
-  .hide-sm { display: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-}
-</style>
+    @media (max-width: 768px) {
+      html, body { padding-top: 32px; }
+      #panels { flex-direction: column; }
+      #bubble-canvas { height: 360px; }
+    }
+
+    /* ── Bubble map ─────────────────────────────────────────────────────────── */
+    #bubble-wrap {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--line-2);
+      background: var(--surface);
+      border-radius: var(--radius);
+    }
+
+    #bubble-label { margin: 18px 24px 0; }
+    #bubble-wallet {
+      display: block;
+      font: 400 12px var(--mono);
+      letter-spacing: 0.04em;
+      color: var(--ink-3);
+      padding: 6px 24px 0;
+    }
+
+    #bubble-placeholder {
+      padding: 20px 24px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+    #bubble-placeholder.error { color: var(--err); }
+
+    #bubble-canvas {
+      display: none;
+      width: 100%;
+      height: 500px;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+
+    #token-detail {
+      display: none;
+      border-top: 1px solid var(--line);
+      padding: 16px 24px 20px;
+    }
+
+    #token-detail-name {
+      font: 700 22px/1.2 var(--display);
+      font-stretch: 75%;
+      margin-bottom: 10px;
+      color: var(--ink);
+      overflow-wrap: anywhere;
+    }
+    .badge {
+      font: 500 11px var(--mono); color: var(--ink-3); text-transform: uppercase;
+      letter-spacing: 0.1em; margin-left: 8px; vertical-align: 3px;
+    }
+    .badge.priced { color: var(--signal); }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 6px 20px;
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+
+    .detail-grid .label { color: var(--ink-3); }
+    .detail-grid .value { color: var(--ink); overflow-wrap: anywhere; }
+    .detail-grid .desc { grid-column: 1 / -1; font-family: var(--sans); font-size: 14px; color: var(--ink-2); padding-bottom: 8px; line-height: 1.7; }
+    .detail-grid .rule { grid-column: 1 / -1; border-top: 1px solid var(--line); margin-bottom: 4px; }
+
+    .copy-btn {
+      margin-top: 8px; background: transparent; color: var(--ink); border: 1px solid var(--line-3);
+      border-radius: var(--radius); font: 600 13px var(--sans); padding: 6px 14px; cursor: pointer;
+      transition: border-color .15s;
+    }
+    .copy-btn:hover { border-color: var(--ink); }
+
+    /* ── Summary bar ────────────────────────────────────────────────────────── */
+    #summary-bar {
+      width: min(1200px, 100%);
+      margin-top: 16px;
+      border: 1px solid var(--line-2);
+      background: var(--surface);
+      border-radius: var(--radius);
+      grid-template-columns: repeat(3, 1fr);
+      display: none;
+    }
+    #summary-bar.visible { display: grid; }
+
+    .stat-cell {
+      padding: 28px 28px;
+      border-right: 1px solid var(--line);
+    }
+    .stat-cell:last-child { border-right: none; }
+
+    .stat-label {
+      display: block;
+      font: 500 12px/1.4 var(--mono);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-3);
+      margin-bottom: 10px;
+    }
+
+    .stat-value {
+      display: block;
+      font: 700 34px/1.1 var(--display);
+      font-stretch: 75%;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink);
+    }
+
+    .stat-sub {
+      display: block;
+      font-size: 13px;
+      color: var(--ink-3);
+      margin-top: 6px;
+    }
+
+    @media (max-width: 768px) {
+      #summary-bar { grid-template-columns: 1fr; }
+      .stat-cell { border-right: none; border-bottom: 1px solid var(--line); }
+      .stat-cell:last-child { border-bottom: none; }
+    }
+
+    /* ── Heatmap ─────────────────────────────────────────────────────────── */
+    #heatmap-wrap {
+      width: min(1200px, 100%);
+      margin-top: 16px;
+      border: 1px solid var(--line-2);
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 18px 24px 24px;
+      display: none;
+    }
+    #heatmap-wrap.visible { display: block; }
+
+    #heatmap-label { margin-bottom: 14px; }
+
+    #heatmap-placeholder {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--ink-3);
+    }
+
+    #heatmap-chart { display: none; overflow-x: auto; }
+
+    .heatmap-inner { display: inline-block; }
+
+    .heatmap-month-row {
+      position: relative;
+      height: 16px;
+      margin-bottom: 4px;
+    }
+
+    .heatmap-month {
+      position: absolute;
+      font: 500 10px var(--mono);
+      letter-spacing: 0.10em;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .heatmap-grid {
+      display: flex;
+      gap: 3px;
+    }
+
+    .heatmap-col {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .heatmap-cell {
+      width: 13px;
+      height: 13px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      font: 500 10px var(--mono);
+      color: var(--ink-3);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .legend-cell {
+      width: 13px;
+      height: 13px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    #heatmap-tooltip {
+      position: fixed;
+      display: none;
+      background: var(--ink);
+      color: var(--bg);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      pointer-events: none;
+      z-index: 1000;
+      white-space: nowrap;
+    }
+  </style>
 </head>
 <body>
-<header class="nav">
-  <div class="wrap nav-in">
-    <a class="brand" href="./" aria-label="Solana Tracker home">
-      <svg class="logo-mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="14" r="6.5" fill="#EDEAE3"/><circle cx="18" cy="6" r="3.5" fill="#FF8A3D"/></svg>
-      Solana Tracker
-    </a>
-    <span class="label nav-meta">Read-only</span>
+
+  <div id="card">
+    <span id="card-label">Wallet Address</span>
+    <input
+      id="wallet"
+      type="text"
+      value="FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP"
+      spellcheck="false"
+      autocomplete="off"
+      aria-label="Wallet address"
+      aria-describedby="wallet-err"
+    >
+    <p id="wallet-err" role="alert"></p>
+    <button id="enter">Enter</button>
   </div>
-</header>
 
-<main id="main">
-  <section class="hero">
-    <div class="wrap hero-in">
-      <div class="hero-copy">
-        <p class="label ruled">Wallet lookup</p>
-        <h1 class="headline">See what any Solana wallet holds.</h1>
-        <p class="lede">Every token, what it's worth today, and when the wallet trades. Paste an address; nothing to connect or sign.</p>
-      </div>
-      <form class="lookup" id="lookup" novalidate>
-        <span class="corners" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-        <div class="field">
-          <label for="wallet">Wallet address</label>
-          <div class="field-row">
-            <input id="wallet" name="address" type="text" placeholder="e.g. FuUKYBnc…TxeP" spellcheck="false" autocomplete="off" autocapitalize="off" aria-describedby="wallet-err">
-            <button class="btn primary" id="go" type="submit">Look up wallet</button>
-          </div>
-        </div>
-        <p class="field-error" id="wallet-err" role="alert"></p>
-        <div class="field-help">
-          <span>Public data only. We never ask for keys.</span>
-          <button type="button" class="linkbtn" id="example">Try an example wallet</button>
-        </div>
-      </form>
+  <div id="summary-bar">
+    <div class="stat-cell">
+      <span class="stat-label">Total Value</span>
+      <span class="stat-value" id="stat-total-value">—</span>
+      <span class="stat-sub" id="stat-total-value-sub">—</span>
     </div>
-  </section>
-
-  <section class="wrap results" id="results" hidden aria-live="polite">
-    <div class="res-head">
-      <div>
-        <p class="label">Wallet</p>
-        <p class="res-addr" id="res-addr"></p>
-      </div>
-      <div class="res-actions">
-        <button class="btn ghost sm" id="copy-addr" type="button">Copy address</button>
-        <a class="btn ghost sm" id="solscan" target="_blank" rel="noopener">View on Solscan</a>
-        <button class="btn ghost sm" id="share" type="button">Copy link</button>
-      </div>
+    <div class="stat-cell">
+      <span class="stat-label">SOL Balance</span>
+      <span class="stat-value" id="stat-sol-balance">—</span>
+      <span class="stat-sub" id="stat-sol-balance-sub">—</span>
     </div>
-
-    <dl class="kpis" id="kpis">
-      <div><dt class="label">Total value</dt><dd id="k-total">—</dd><span class="sub" id="k-total-sub"></span></div>
-      <div><dt class="label">SOL</dt><dd id="k-sol">—</dd><span class="sub" id="k-sol-sub"></span></div>
-      <div><dt class="label">Tokens</dt><dd id="k-tok">—</dd><span class="sub" id="k-tok-sub"></span></div>
-      <div><dt class="label">Transactions read</dt><dd id="k-tx">—</dd><span class="sub" id="k-tx-sub"></span></div>
-    </dl>
-
-    <div class="grid2">
-      <section class="panel" aria-labelledby="map-h">
-        <div class="panel-head"><h2 id="map-h">Bubble map</h2><span class="label">Size = USD value</span></div>
-        <div id="bubble-stage">
-          <canvas id="bubble-canvas" aria-label="3D bubble map of token holdings. Use the holdings table below for the same data."></canvas>
-          <span class="label stage-hint">Drag to orbit · click a bubble</span>
-        </div>
-      </section>
-      <section class="panel" aria-labelledby="det-h">
-        <div class="panel-head"><h2 id="det-h">Token</h2><span class="tag" id="det-tag"></span></div>
-        <div class="panel-body detail" id="detail"></div>
-      </section>
+    <div class="stat-cell">
+      <span class="stat-label">Token Balance</span>
+      <span class="stat-value" id="stat-token-balance">—</span>
+      <span class="stat-sub" id="stat-token-balance-sub">—</span>
     </div>
-
-    <section class="panel" aria-labelledby="hold-h">
-      <div class="panel-head"><h2 id="hold-h">Holdings</h2><span class="label" id="hold-count"></span></div>
-      <div class="scroll">
-        <table>
-          <thead><tr><th scope="col">Token</th><th scope="col" class="r hide-sm">Amount</th><th scope="col" class="r hide-sm">Price</th><th scope="col" class="r">Value</th></tr></thead>
-          <tbody id="hold-body"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="panel" aria-labelledby="act-h">
-      <div class="panel-head"><h2 id="act-h">Trading activity</h2><span class="label" id="act-note"></span></div>
-      <div class="panel-body"><div class="heat" id="heat"></div></div>
-    </section>
-  </section>
-</main>
-
-<footer class="foot">
-  <div class="wrap foot-in">
-    <p>Read-only. Balances from Helius, prices from Jupiter. Not financial advice.</p>
-    <p>Token names come from on-chain metadata and can be faked.</p>
   </div>
-</footer>
-<div id="tip" hidden></div>
 
-<script>
-const EXAMPLE = 'FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP';
-const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-const SOL_MINT = 'So11111111111111111111111111111111111111112';
-const STABLES = new Set(['USDC', 'USDT', 'USDH', 'PYUSD', 'USDS']);
-const HEAT = ['#17171D', 'rgba(255,138,61,.28)', 'rgba(255,138,61,.5)', 'rgba(255,138,61,.75)', '#FF8A3D'];
+  <div id="panels">
+    <div id="bubble-wrap">
+      <span id="bubble-label">Bubble Map</span>
+      <span id="bubble-wallet"></span>
+      <div id="bubble-placeholder">Waiting for input...</div>
+      <canvas id="bubble-canvas"></canvas>
+      <div id="token-detail">
+        <div id="token-detail-name"></div>
+        <div class="detail-grid" id="token-detail-grid"></div>
+      </div>
+    </div>
+  </div>
 
-const $ = id => document.getElementById(id);
-const form = $('lookup'), input = $('wallet'), go = $('go'), err = $('wallet-err');
-let current = null;      // last report
-let selected = null;     // selected mint
-let map = null;          // bubble map handle
 
-// Every string that came from the chain goes through esc() before touching innerHTML.
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const short = a => a.length > 12 ? a.slice(0, 4) + '…' + a.slice(-4) : a;
+  <div id="heatmap-wrap">
+    <span id="heatmap-label">Trading Activity</span>
+    <div id="heatmap-placeholder">Run analysis to see activity</div>
+    <div id="heatmap-chart"></div>
+  </div>
+  <div id="heatmap-tooltip"></div>
 
-function fmt(v) {
-  if (v == null || isNaN(v)) return '—';
-  const a = Math.abs(v), s = v < 0 ? '-' : '';
-  if (a >= 1e9) return s + (a / 1e9).toFixed(2) + 'B';
-  if (a >= 1e6) return s + (a / 1e6).toFixed(2) + 'M';
-  if (a >= 1) return s + a.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (a === 0) return '0';
-  return s + a.toLocaleString('en-US', { maximumSignificantDigits: 4 });
-}
-const usd = v => v == null ? '—' : '$' + fmt(v);
+  <script>
+    const DEFAULT    = 'FuUKYBncpU3BSJ43hgKigKhzYrigWUEja3n69gzNTxeP';
+    const ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    const SOL_MINT   = 'So11111111111111111111111111111111111111112';
+    const STABLECOINS = new Set(['USDC', 'USDT', 'USDH']);
+    const input    = document.getElementById('wallet');
+    const enterBtn = document.getElementById('enter');
+    const errEl    = document.getElementById('wallet-err');
 
-// ── Lookup ──────────────────────────────────────────────────────────────
-form.addEventListener('submit', e => { e.preventDefault(); lookup(input.value.trim()); });
-input.addEventListener('blur', () => { const v = input.value.trim(); if (v && !ADDRESS_RE.test(v)) showErr(badAddr); });
-input.addEventListener('input', () => { if (err.textContent) showErr(''); });
-$('example').addEventListener('click', () => { input.value = EXAMPLE; lookup(EXAMPLE); });
+    // Token names and symbols come from on-chain metadata, which anyone can set.
+    // Everything from the chain goes through esc() before it touches innerHTML.
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const badAddr = "That doesn't look like a Solana wallet address. Paste the full address (32 to 44 characters).";
-function showErr(msg) { err.textContent = msg; input.setAttribute('aria-invalid', msg ? 'true' : 'false'); }
+    // ── Input behaviour ──────────────────────────────────────────────────────
+    input.addEventListener('focus', () => {
+      if (input.value === DEFAULT) input.select();
+    });
 
-let inflight = null;
-async function lookup(addr) {
-  if (!ADDRESS_RE.test(addr)) { showErr(badAddr); input.focus(); return; }
-  showErr('');
-  if (inflight) inflight.abort();
-  inflight = new AbortController();
-  go.disabled = true; go.textContent = 'Reading wallet…';
-  showLoading(addr);
-  try {
-    const r = await fetch('/api/wallet?address=' + encodeURIComponent(addr), { signal: inflight.signal });
-    const data = await r.json().catch(() => ({ error: "The server sent a reply we couldn't read. Try again." }));
-    if (!r.ok || data.error) throw new Error(data.error || 'Something went wrong. Try again.');
-    const url = new URL(location.href); url.searchParams.set('address', addr);
-    history.replaceState(null, '', url);
-    render(data);
-  } catch (e) {
-    if (e.name === 'AbortError') return;
-    $('results').hidden = true;
-    showErr(e.message === 'Failed to fetch' ? "Couldn't reach the server. Check your connection and try again." : e.message);
-  } finally {
-    go.disabled = false; go.textContent = 'Look up wallet';
-  }
-}
+    input.addEventListener('input', () => {
+      input.classList.toggle('active', input.value !== DEFAULT && input.value !== '');
+      showErr('');
+    });
 
-function showLoading(addr) {
-  $('results').hidden = false;
-  $('res-addr').textContent = addr;
-  ['k-total', 'k-sol', 'k-tok', 'k-tx'].forEach(id => $(id).textContent = '…');
-  ['k-total-sub', 'k-sol-sub', 'k-tok-sub', 'k-tx-sub'].forEach(id => $(id).textContent = '');
-  $('detail').innerHTML = '<div class="skel" style="height:220px"></div>';
-  $('hold-body').innerHTML = '<tr><td colspan="4"><div class="skel" style="height:120px"></div></td></tr>';
-  $('heat').innerHTML = '<div class="skel" style="height:120px"></div>';
-  $('act-note').textContent = '';
-  if (map) { map.dispose(); map = null; }
-}
+    input.addEventListener('blur', () => {
+      if (input.value.trim() === '') {
+        input.value = DEFAULT;
+        input.classList.remove('active');
+      }
+    });
 
-// ── Render report ───────────────────────────────────────────────────────
-function render(data) {
-  current = data;
-  const h = data.holdings || [];
-  const sol = h.find(x => x.mint === SOL_MINT);
-  const tokens = h.filter(x => x.mint !== SOL_MINT);
-  const total = h.reduce((s, x) => s + (x.usd_value || 0), 0);
-  const tokVal = tokens.reduce((s, x) => s + (x.usd_value || 0), 0);
-  const unpriced = h.filter(x => x.usd_value == null).length;
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') run();
+    });
 
-  $('res-addr').textContent = data.address;
-  $('solscan').href = 'https://solscan.io/account/' + encodeURIComponent(data.address);
-  $('k-total').textContent = usd(total);
-  $('k-total-sub').textContent = unpriced ? `${unpriced} token${unpriced > 1 ? 's' : ''} without a price` : 'All holdings priced';
-  $('k-sol').textContent = sol ? fmt(sol.amount) : '0';
-  $('k-sol-sub').textContent = sol && sol.usd_value != null ? usd(sol.usd_value) : '';
-  $('k-tok').textContent = String(tokens.length);
-  $('k-tok-sub').textContent = tokens.length ? usd(tokVal) + ' in tokens' : 'Only SOL';
-  const act = data.activity;
-  $('k-tx').textContent = act ? String(act.count) : '—';
-  $('k-tx-sub').textContent = act ? (act.capped ? 'Most recent only' : 'Full history') : 'History unavailable';
+    enterBtn.addEventListener('click', run);
 
-  $('hold-count').textContent = `${h.length} asset${h.length !== 1 ? 's' : ''}`;
-  renderTable(h, total);
-  renderHeat(act);
-  map = renderBubbles(h);
-  select(h[0] ? h[0].mint : null);
-}
-
-function renderTable(h, total) {
-  if (!h.length) { $('hold-body').innerHTML = '<tr><td colspan="4" class="empty">This wallet holds nothing right now.</td></tr>'; return; }
-  $('hold-body').innerHTML = h.map(x => {
-    const pct = total > 0 && x.usd_value ? x.usd_value / total : 0;
-    return `<tr data-mint="${esc(x.mint)}" tabindex="0" aria-selected="false">
-      <td><span class="tsym">${esc(x.symbol)}</span><span class="tname">${esc(x.name)}</span></td>
-      <td class="r hide-sm">${fmt(x.amount)}</td>
-      <td class="r hide-sm">${usd(x.price_per_token)}</td>
-      <td class="r">${usd(x.usd_value)}<span class="share" aria-hidden="true"><i style="width:${(pct * 100).toFixed(1)}%"></i></span></td>
-    </tr>`;
-  }).join('');
-}
-$('hold-body').addEventListener('click', e => { const tr = e.target.closest('tr[data-mint]'); if (tr) select(tr.dataset.mint); });
-$('hold-body').addEventListener('keydown', e => {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  const tr = e.target.closest('tr[data-mint]'); if (tr) { e.preventDefault(); select(tr.dataset.mint); }
-});
-
-function select(mint) {
-  selected = mint;
-  document.querySelectorAll('#hold-body tr[data-mint]').forEach(tr => tr.setAttribute('aria-selected', String(tr.dataset.mint === mint)));
-  if (map) map.highlight(mint);
-  const x = current && current.holdings.find(h => h.mint === mint);
-  if (!x) { $('detail').innerHTML = '<p class="empty">Nothing to show.</p>'; $('det-tag').textContent = ''; return; }
-
-  const total = current.holdings.reduce((s, h) => s + (h.usd_value || 0), 0);
-  const isStable = STABLES.has(x.symbol);
-  let desc;
-  if (x.mint === SOL_MINT) desc = 'Native SOL, used to pay every network fee.';
-  else if (isStable) desc = `${esc(x.symbol)} is a stablecoin, meant to stay at $1.`;
-  else if (x.price_per_token != null) desc = `Priced by Jupiter at ${usd(x.price_per_token)} per token.`;
-  else desc = 'No market price found. Often a new meme coin, an airdrop or a spam token.';
-
-  $('det-tag').textContent = x.usd_value != null ? 'Priced' : 'No price';
-  $('det-tag').className = 'tag' + (x.usd_value != null ? ' sig' : '');
-  $('detail').innerHTML = `
-    <div><p class="detail-sym">${esc(x.symbol)}</p>${x.name ? `<p class="detail-name">${esc(x.name)}</p>` : ''}</div>
-    <p class="detail-desc">${desc}</p>
-    <dl class="kv">
-      <dt class="label">Amount</dt><dd>${fmt(x.amount)}</dd>
-      <dt class="label">Value</dt><dd>${usd(x.usd_value)}</dd>
-      <dt class="label">Share</dt><dd>${total > 0 && x.usd_value ? ((x.usd_value / total) * 100).toFixed(1) + '%' : '—'}</dd>
-      <dt class="label">Mint</dt><dd class="addr">${esc(x.mint)}</dd>
-    </dl>
-    <div class="res-actions">
-      <button class="btn ghost sm" type="button" data-copy="${esc(x.mint)}">Copy mint</button>
-      <a class="btn ghost sm" href="https://solscan.io/token/${encodeURIComponent(x.mint)}" target="_blank" rel="noopener">View on Solscan</a>
-    </div>`;
-}
-
-// ── Copy helpers ────────────────────────────────────────────────────────
-async function copy(text, btn) {
-  try { await navigator.clipboard.writeText(text); }
-  catch { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
-  const old = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = old, 1400);
-}
-$('copy-addr').addEventListener('click', e => current && copy(current.address, e.currentTarget));
-$('share').addEventListener('click', e => copy(location.href, e.currentTarget));
-$('detail').addEventListener('click', e => { const b = e.target.closest('[data-copy]'); if (b) copy(b.dataset.copy, b); });
-
-// ── Bubble map (Three.js) ───────────────────────────────────────────────
-function renderBubbles(holdings) {
-  const stage = $('bubble-stage'), canvas = $('bubble-canvas');
-  if (!window.THREE || !holdings.length) return null;
-
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0C0C10);
-  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-  const key = new THREE.DirectionalLight(0xffffff, 0.8); key.position.set(6, 10, 8); scene.add(key);
-
-  const controls = new THREE.OrbitControls(camera, canvas);
-  controls.enableDamping = true; controls.dampingFactor = 0.06;
-  controls.enablePan = false;
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  controls.autoRotate = !reduce; controls.autoRotateSpeed = 0.5;
-
-  const minR = 0.35, maxR = 2.0;
-  const lg = v => v > 0 ? Math.log10(v + 1) : 0;
-  const maxLog = lg(Math.max(1, ...holdings.map(h => h.usd_value || 0))) || 1;
-  const n = holdings.length;
-  const ring = n > 1 ? Math.max(8, (maxR + 0.6) / Math.sin(Math.PI / n)) : 0;
-  const fit = () => {   // frame the whole ring at any aspect ratio
-    const d = (ring + maxR + 1.2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(1, camera.aspect);
-    camera.position.set(0, 0.42, 1).normalize().multiplyScalar(Math.max(8, d));
-  };
-
-  const meshes = [], byMint = new Map();
-  holdings.forEach((h, i) => {
-    const a = (i / n) * Math.PI * 2;
-    const r = h.usd_value != null ? minR + (lg(h.usd_value) / maxLog) * (maxR - minR) : minR;
-    const priced = h.usd_value != null;
-    const mat = new THREE.MeshStandardMaterial({ color: priced ? 0x3A3A44 : 0x1E1E25, roughness: 0.7, metalness: 0.05 });
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 40, 40), mat);
-    mesh.position.set(Math.cos(a) * ring, 0, Math.sin(a) * ring);
-    const wire = new THREE.Mesh(new THREE.SphereGeometry(r * 1.004, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0xEDEAE3, wireframe: true, transparent: true, opacity: priced ? 0.1 : 0.22 }));
-    mesh.add(wire);
-    scene.add(mesh);
-    const label = makeLabel(h.symbol, priced ? usd(h.usd_value) : 'no price');
-    label.position.set(mesh.position.x, r + 0.75, mesh.position.z);
-    scene.add(label);
-    mesh.userData = { mint: h.mint, mat, wire, base: mat.color.getHex() };
-    meshes.push(mesh); byMint.set(h.mint, mesh);
-  });
-
-  // Click vs drag: only treat as a click if the pointer barely moved.
-  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
-  let down = null;
-  const ac = new AbortController();
-  canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; }, { signal: ac.signal });
-  canvas.addEventListener('pointerup', e => {
-    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return;
-    const rect = canvas.getBoundingClientRect();
-    ptr.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-    ray.setFromCamera(ptr, camera);
-    const hit = ray.intersectObjects(meshes, false)[0];
-    if (hit) select(hit.object.userData.mint);
-  }, { signal: ac.signal });
-
-  const resize = () => {
-    const w = stage.clientWidth, hgt = stage.clientHeight;
-    camera.aspect = w / hgt; camera.updateProjectionMatrix(); renderer.setSize(w, hgt, false);
-    if (!fitted) { fit(); fitted = true; }
-  };
-  let fitted = false;
-  const ro = new ResizeObserver(resize); ro.observe(stage); resize();
-
-  let alive = true;
-  (function loop() { if (!alive) return; requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
-
-  return {
-    highlight(mint) {
-      meshes.forEach(m => {
-        const on = m.userData.mint === mint;
-        m.userData.mat.color.setHex(on ? 0xFF8A3D : m.userData.base);
-        m.userData.mat.emissive && m.userData.mat.emissive.setHex(on ? 0x331503 : 0x000000);
-        m.userData.wire.material.opacity = on ? 0.25 : (m.userData.base === 0x3A3A44 ? 0.1 : 0.22);
-      });
-    },
-    dispose() {
-      alive = false; ac.abort(); ro.disconnect(); controls.dispose();
-      scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
-      renderer.dispose();
-    },
-  };
-}
-
-function makeLabel(name, sub) {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 160;
-  const ctx = c.getContext('2d');
-  const shown = name.length > 12 ? name.slice(0, 11) + '…' : name;
-  ctx.textAlign = 'center';
-  ctx.font = '600 56px "IBM Plex Sans", Helvetica, sans-serif'; ctx.fillStyle = '#EDEAE3'; ctx.fillText(shown, 256, 68);
-  ctx.font = '500 36px "IBM Plex Mono", Menlo, monospace'; ctx.fillStyle = '#8E8C96'; ctx.fillText(sub, 256, 124);
-  const tex = new THREE.CanvasTexture(c);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-  s.scale.set(3.2, 1, 1);
-  return s;
-}
-
-// ── Activity heatmap (UTC days, matching the server's buckets) ──────────
-function renderHeat(act) {
-  const el = $('heat');
-  if (!act) { el.innerHTML = '<p class="empty">Trading history couldn\'t be loaded. Balances above are still current.</p>'; $('act-note').textContent = ''; return; }
-  const days = act.days || {};
-  const keys = Object.keys(days).sort();
-  $('act-note').textContent = act.capped && keys.length ? `Last ${act.count} transactions, since ${keys[0]}` : `${act.count} transactions`;
-  if (!act.count) { el.innerHTML = '<p class="empty">No transactions found for this wallet.</p>'; return; }
-
-  const DAY = 864e5;
-  const now = new Date(); const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const todayDow = new Date(today).getUTCDay();
-  const start = today - (todayDow + 52 * 7) * DAY;
-  const max = Math.max(1, ...Object.values(days));
-  const level = c => c === 0 ? 0 : Math.min(4, Math.ceil((c / max) * 4));
-
-  let cols = '', months = '', lastMonth = -1, lastX = -99, w = 0;
-  for (let t = start; t <= today; t += 7 * DAY, w++) {
-    const m = new Date(t).getUTCMonth(), x = w * 15;
-    if (m !== lastMonth && x - lastX >= 30) { months += `<span style="left:${x}px">${new Date(t).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })}</span>`; lastX = x; }
-    lastMonth = m;
-    let col = '';
-    for (let d = 0; d < 7 && t + d * DAY <= today; d++) {
-      const iso = new Date(t + d * DAY).toISOString().slice(0, 10);
-      const c = days[iso] || 0;
-      col += `<div class="heat-cell" data-d="${iso}" data-c="${c}" style="background:${HEAT[level(c)]}"></div>`;
+    function showErr(msg) {
+      errEl.textContent = msg;
+      input.setAttribute('aria-invalid', msg ? 'true' : 'false');
     }
-    cols += `<div class="heat-col">${col}</div>`;
-  }
-  el.innerHTML = `<div class="heat-in"><div class="heat-months">${months}</div><div class="heat-grid">${cols}</div>
-    <div class="heat-legend"><span>Less</span>${HEAT.map(c => `<i style="background:${c}"></i>`).join('')}<span>More</span><span style="margin-left:auto">UTC days</span></div></div>`;
-  el.scrollLeft = el.scrollWidth;   // newest weeks first on narrow screens
-}
-const tip = $('tip');
-$('heat').addEventListener('pointerover', e => {
-  const c = e.target.closest('.heat-cell'); if (!c) { tip.hidden = true; return; }
-  const n = +c.dataset.c, d = new Date(c.dataset.d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  tip.textContent = n ? `${d} · ${n} transaction${n > 1 ? 's' : ''}` : `${d} · none`;
-  tip.hidden = false;
-});
-$('heat').addEventListener('pointermove', e => { tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY - 38) + 'px'; });
-$('heat').addEventListener('pointerleave', () => { tip.hidden = true; });
 
-// ── Deep link: ?address=… runs on load ──────────────────────────────────
-const fromUrl = new URLSearchParams(location.search).get('address');
-if (fromUrl) { input.value = fromUrl; document.fonts.ready.then(() => lookup(fromUrl)); }
-</script>
+    // ── Lookup ───────────────────────────────────────────────────────────────
+    let inflight = null;
+
+    async function run() {
+      const addr = input.value.trim();
+      if (!ADDRESS_RE.test(addr)) {
+        showErr("That doesn't look like a Solana wallet address. Paste the full address (32 to 44 characters).");
+        return;
+      }
+      showErr('');
+      if (inflight) inflight.abort();
+      inflight = new AbortController();
+
+      enterBtn.disabled    = true;
+      enterBtn.textContent = 'Running...';
+
+      resetView(addr);
+
+      try {
+        const r = await fetch(`/api/wallet?address=${encodeURIComponent(addr)}`, { signal: inflight.signal });
+        const data = await r.json().catch(() => ({ error: "The server sent a reply we couldn't read. Try again." }));
+        if (!r.ok || data.error) throw new Error(data.error || 'Something went wrong. Try again.');
+        showHoldings(addr, data.holdings || []);
+        showHeatmap(data.activity);
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        const msg = e.message === 'Failed to fetch' ? "Couldn't reach the server. Check your connection and try again." : e.message;
+        const ph = document.getElementById('bubble-placeholder');
+        ph.textContent = msg;
+        ph.classList.add('error');
+        document.getElementById('bubble-wallet').textContent = shortAddr(addr);
+        document.getElementById('heatmap-wrap').classList.remove('visible');
+      } finally {
+        enterBtn.disabled    = false;
+        enterBtn.textContent = 'Enter';
+      }
+    }
+
+    const shortAddr = a => a ? a.slice(0, 4) + '…' + a.slice(-4) : '';
+
+    function resetView(addr) {
+      document.getElementById('summary-bar').classList.remove('visible');
+
+      const hw = document.getElementById('heatmap-wrap');
+      hw.classList.add('visible');
+      document.getElementById('heatmap-chart').style.display = 'none';
+      const hp = document.getElementById('heatmap-placeholder');
+      hp.style.display = 'block';
+      hp.textContent = 'Loading activity…';
+
+      disposeBubbles();
+      const canvas = document.getElementById('bubble-canvas');
+      const placeholder = document.getElementById('bubble-placeholder');
+      canvas.style.display      = 'none';
+      placeholder.style.display = 'block';
+      placeholder.classList.remove('error');
+      placeholder.textContent   = 'Loading holdings…';
+      document.getElementById('bubble-wallet').textContent = `Loading ${shortAddr(addr)}…`;
+      document.getElementById('token-detail').style.display = 'none';
+    }
+
+    function showHoldings(addr, holdings) {
+      document.getElementById('bubble-wallet').textContent = shortAddr(addr);
+      if (!holdings.length) {
+        document.getElementById('bubble-placeholder').textContent = 'No holdings found.';
+        return;
+      }
+      renderBubbles(holdings);
+
+      const sol        = holdings.find(h => h.mint === SOL_MINT);
+      const tokens     = holdings.filter(h => h.mint !== SOL_MINT);
+      const totalValue = holdings.reduce((s, h) => s + (h.usd_value || 0), 0);
+      const tokenValue = tokens.reduce((s, h) => s + (h.usd_value || 0), 0);
+
+      // ── Total value ───────────────────────────────────────────────
+      const pricedCount = holdings.filter(h => h.usd_value != null).length;
+      document.getElementById('stat-total-value').textContent = `$${fmtAmt(totalValue)}`;
+      document.getElementById('stat-total-value-sub').textContent =
+        `${holdings.length} token${holdings.length !== 1 ? 's' : ''} · ${pricedCount} with known price`;
+
+      // ── SOL balance ───────────────────────────────────────────────
+      if (sol && sol.usd_value != null) {
+        document.getElementById('stat-sol-balance').textContent = `$${fmtAmt(sol.usd_value)}`;
+        document.getElementById('stat-sol-balance-sub').textContent = `${fmtAmt(sol.amount)} SOL`;
+      } else {
+        document.getElementById('stat-sol-balance').textContent = sol ? `${fmtAmt(sol.amount)} SOL` : '$0.00';
+        document.getElementById('stat-sol-balance-sub').textContent = sol ? 'price unavailable' : '0 SOL held';
+      }
+
+      // ── Token balance ─────────────────────────────────────────────
+      document.getElementById('stat-token-balance').textContent = `$${fmtAmt(tokenValue)}`;
+      document.getElementById('stat-token-balance-sub').textContent =
+        `across ${tokens.length} token${tokens.length !== 1 ? 's' : ''}`;
+
+      document.getElementById('summary-bar').classList.add('visible');
+    }
+
+    // ── Bubble chart ─────────────────────────────────────────────────────────
+    let bubble = null;   // { renderer, alive, ac, ro }
+
+    function disposeBubbles() {
+      if (!bubble) return;
+      bubble.alive = false;
+      bubble.ac.abort();       // removes the click listener
+      bubble.ro.disconnect();  // removes the resize watcher
+      bubble.renderer.dispose();
+      bubble = null;
+    }
+
+    function renderBubbles(tokens) {
+      const placeholder = document.getElementById('bubble-placeholder');
+      const canvas      = document.getElementById('bubble-canvas');
+      const wrap        = document.getElementById('bubble-wrap');
+
+      disposeBubbles();
+      if (!window.THREE) { placeholder.textContent = "The 3D map couldn't load."; return; }
+
+      placeholder.style.display = 'none';
+      canvas.style.display      = 'block';
+
+      const scene    = new THREE.Scene();
+      scene.background = new THREE.Color(0x111116);
+
+      const camera   = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
+
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      dir.position.set(5, 10, 5);
+      scene.add(dir);
+
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping  = true;
+      controls.dampingFactor  = 0.05;
+      controls.autoRotate     = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      controls.autoRotateSpeed = 0.6;
+
+      const minSize  = 0.3;
+      const maxSize  = 2.0;
+      // Log scale so small holdings stay visible when one token dominates
+      const logVal    = v => v > 0 ? Math.log10(v + 1) : 0;
+      const knownVals = tokens.filter(t => t.usd_value != null).map(t => t.usd_value);
+      const maxLog = logVal((knownVals.length ? Math.max(...knownVals) : 1) || 1) || 1;
+
+      // Ring radius large enough that adjacent bubbles never touch
+      const gap  = 0.5;
+      const ring = tokens.length > 1
+        ? Math.max(10, (maxSize + gap) / Math.sin(Math.PI / tokens.length))
+        : 10;
+
+      camera.position.set(0, ring * 0.35, ring * 1.9);
+
+      const clickableMeshes = [];
+      const meshTokenMap    = new Map();
+
+      tokens.forEach((token, i) => {
+        const angle   = (i / tokens.length) * Math.PI * 2;
+        const priced  = token.usd_value != null;
+        const size    = priced ? minSize + (logVal(token.usd_value) / maxLog) * (maxSize - minSize) : minSize;
+
+        // Fill sphere — grey for priced tokens, warm tint for unpriced ones
+        const geo  = new THREE.SphereGeometry(size, 32, 32);
+        const mat  = new THREE.MeshStandardMaterial({
+          color:     priced ? 0x3A3A44 : 0x3A2A20,
+          roughness: priced ? 0.6 : 0.8,
+          metalness: 0,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(Math.cos(angle) * ring, 0, Math.sin(angle) * ring);
+        scene.add(mesh);
+        clickableMeshes.push(mesh);
+        meshTokenMap.set(mesh.uuid, token);
+
+        // Wireframe overlay — more visible for unpriced tokens
+        const wfMat  = new THREE.MeshBasicMaterial({
+          color:       priced ? 0xEDEAE3 : 0xFF8A3D,
+          wireframe:   true,
+          transparent: true,
+          opacity:     priced ? 0.12 : 0.3,
+        });
+        const wfMesh = new THREE.Mesh(new THREE.SphereGeometry(size * 1.002, 16, 16), wfMat);
+        wfMesh.position.copy(mesh.position);
+        scene.add(wfMesh);
+
+        // Label sprite
+        const labelSub = priced ? `$${fmtAmt(token.usd_value)}` : `${fmtAmt(token.amount)} tokens`;
+        const label = makeLabel(token.symbol, labelSub);
+        label.position.set(mesh.position.x, mesh.position.y + size + 0.6, mesh.position.z);
+        scene.add(label);
+      });
+
+      // Click to drill down
+      const ac = new AbortController();
+      const raycaster = new THREE.Raycaster();
+      canvas.addEventListener('click', e => {
+        const rect  = canvas.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+          ((e.clientX - rect.left)  / rect.width)  *  2 - 1,
+          ((e.clientY - rect.top)   / rect.height) * -2 + 1
+        );
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObjects(clickableMeshes);
+        if (hits.length > 0) showHoldingDetail(meshTokenMap.get(hits[0].object.uuid));
+      }, { signal: ac.signal });
+
+      const resize = () => {
+        const W = wrap.clientWidth, H = canvas.clientHeight || 500;
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        renderer.setSize(W, H, false);
+      };
+      const ro = new ResizeObserver(resize);
+      ro.observe(wrap);
+      resize();
+
+      bubble = { renderer, alive: true, ac, ro };
+      const me = bubble;
+      (function animate() {
+        if (!me.alive) return;
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      })();
+    }
+
+    function fmtAmt(val) {
+      const abs  = Math.abs(val);
+      const sign = val < 0 ? '-' : '';
+      if (abs >= 1e9) return sign + (abs / 1e9).toFixed(2) + 'B';
+      if (abs >= 1e6) return sign + (abs / 1e6).toFixed(2) + 'M';
+      if (abs >= 1)   return sign + abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (abs === 0)  return '0';
+      // Small amounts: show enough precision to be non-zero
+      return sign + abs.toLocaleString('en-US', { minimumSignificantDigits: 2, maximumSignificantDigits: 4 });
+    }
+
+    function copyTokenAddr(btn) {
+      const text = btn.getAttribute('data-addr');
+      const done = () => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy address'; }, 1500);
+      };
+      navigator.clipboard.writeText(text).then(done).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        done();
+      });
+    }
+    document.getElementById('token-detail-grid').addEventListener('click', e => {
+      const b = e.target.closest('.copy-btn');
+      if (b) copyTokenAddr(b);
+    });
+
+    function makeLabel(name, subtitle) {
+      const c   = document.createElement('canvas');
+      c.width   = 256;
+      c.height  = 80;
+      const ctx = c.getContext('2d');
+
+      // Shorten long names for display
+      const displayName = name.length > 12 ? name.slice(0, 6) + '…' + name.slice(-4) : name;
+
+      ctx.font      = '600 30px "IBM Plex Sans", sans-serif';
+      ctx.fillStyle = '#EDEAE3';
+      ctx.textAlign = 'center';
+      ctx.fillText(displayName, 128, 34);
+
+      ctx.font      = '500 20px "IBM Plex Mono", monospace';
+      ctx.fillStyle = '#8E8C96';
+      ctx.fillText(subtitle, 128, 60);
+
+      const tex    = new THREE.CanvasTexture(c);
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+      sprite.scale.set(3.2, 1, 1);
+      return sprite;
+    }
+
+    // ── Heatmap (UTC days, matching how the server counts them) ──────────────
+    const HEAT_COLORS = ['#17171D', 'rgba(255,138,61,.28)', 'rgba(255,138,61,.5)', 'rgba(255,138,61,.75)', '#FF8A3D'];
+
+    function heatColor(count, max) {
+      if (count === 0) return HEAT_COLORS[0];
+      const ratio = count / max;
+      if (ratio <= 0.25) return HEAT_COLORS[1];
+      if (ratio <= 0.50) return HEAT_COLORS[2];
+      if (ratio <= 0.75) return HEAT_COLORS[3];
+      return HEAT_COLORS[4];
+    }
+
+    function showHeatmap(activity) {
+      const placeholder = document.getElementById('heatmap-placeholder');
+      if (!activity) { placeholder.textContent = "Couldn't load trading activity."; return; }
+      if (!activity.count) { placeholder.textContent = 'No transactions found.'; return; }
+      renderHeatmap(activity.days || {});
+    }
+
+    function renderHeatmap(data) {
+      const chart       = document.getElementById('heatmap-chart');
+      const placeholder = document.getElementById('heatmap-placeholder');
+
+      // Build 52-week window ending today (UTC)
+      const DAY   = 864e5;
+      const now   = new Date();
+      const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+      const startSunday = today - (new Date(today).getUTCDay() + 52 * 7) * DAY;
+
+      // Build array of week arrays
+      const weeks = [];
+      for (let t = startSunday; t <= today; t += 7 * DAY) {
+        const week = [];
+        for (let d = 0; d < 7 && t + d * DAY <= today; d++) week.push(new Date(t + d * DAY));
+        weeks.push(week);
+      }
+
+      const maxCount = Math.max(1, ...Object.values(data).map(Number));
+      const monthName = d => d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+
+      const inner = document.createElement('div');
+      inner.className = 'heatmap-inner';
+
+      // Month label row
+      const monthRow = document.createElement('div');
+      monthRow.className = 'heatmap-month-row';
+      const CELL_STEP = 16; // 13px cell + 3px gap
+
+      const firstLabel = document.createElement('span');
+      firstLabel.className = 'heatmap-month';
+      firstLabel.style.left = '0px';
+      firstLabel.textContent = monthName(weeks[0][0]);
+      monthRow.appendChild(firstLabel);
+
+      let lastLabelX = 0;
+      weeks.forEach((week, wi) => {
+        if (wi === 0) return;
+        const prevMonth = weeks[wi - 1][0].getUTCMonth();
+        const curMonth  = week[0].getUTCMonth();
+        const x = wi * CELL_STEP;
+        if (curMonth !== prevMonth && x - lastLabelX >= 28) {
+          const lbl = document.createElement('span');
+          lbl.className  = 'heatmap-month';
+          lbl.style.left = x + 'px';
+          lbl.textContent = monthName(week[0]);
+          monthRow.appendChild(lbl);
+          lastLabelX = x;
+        }
+      });
+      inner.appendChild(monthRow);
+
+      // Cell grid
+      const grid = document.createElement('div');
+      grid.className = 'heatmap-grid';
+
+      weeks.forEach(week => {
+        const col = document.createElement('div');
+        col.className = 'heatmap-col';
+        week.forEach(date => {
+          const dateStr = date.toISOString().slice(0, 10);
+          const count   = data[dateStr] || 0;
+          const cell    = document.createElement('div');
+          cell.className        = 'heatmap-cell';
+          cell.style.background = heatColor(count, maxCount);
+          cell.dataset.date     = dateStr;
+          cell.dataset.count    = count;
+          col.appendChild(cell);
+        });
+        grid.appendChild(col);
+      });
+      inner.appendChild(grid);
+
+      // Legend
+      const legend = document.createElement('div');
+      legend.className = 'heatmap-legend';
+      legend.innerHTML = `<span>Less</span>` +
+        HEAT_COLORS.map(c => `<div class="legend-cell" style="background:${c}"></div>`).join('') +
+        `<span>More</span>`;
+      inner.appendChild(legend);
+
+      chart.innerHTML = '';
+      chart.appendChild(inner);
+
+      placeholder.style.display = 'none';
+      chart.style.display = 'block';
+      chart.scrollLeft = chart.scrollWidth;   // newest weeks visible on narrow screens
+    }
+
+    // Tooltip listeners are attached once, not on every render.
+    (function () {
+      const chart   = document.getElementById('heatmap-chart');
+      const tooltip = document.getElementById('heatmap-tooltip');
+      chart.addEventListener('mouseover', e => {
+        const cell = e.target.closest('.heatmap-cell');
+        if (!cell) { tooltip.style.display = 'none'; return; }
+        const count = parseInt(cell.dataset.count);
+        const d     = new Date(cell.dataset.date + 'T12:00:00Z');
+        const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+        tooltip.textContent = count > 0
+          ? `${label} — ${count} trade${count !== 1 ? 's' : ''}`
+          : `${label} — No activity`;
+        tooltip.style.display = 'block';
+      });
+      chart.addEventListener('mousemove', e => {
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top  = (e.clientY - 36) + 'px';
+      });
+      chart.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+    })();
+
+    function showHoldingDetail(holding) {
+      const isStable = STABLECOINS.has(holding.symbol);
+      const sym      = esc(holding.symbol);
+
+      let description;
+      if (isStable) {
+        description = `${sym} is a stablecoin — each unit is pegged to $1 USD.`;
+      } else if (holding.price_per_token) {
+        description = `${sym} is a Solana token currently worth ~$${fmtAmt(holding.price_per_token)} per token.`;
+      } else {
+        description = `${sym} is an unidentified token — likely a meme coin or airdrop with no trackable price.`;
+      }
+
+      const usdDisplay   = holding.usd_value      != null ? `$${fmtAmt(holding.usd_value)}`       : 'price unknown';
+      const priceDisplay = holding.price_per_token != null ? `$${fmtAmt(holding.price_per_token)}` : '—';
+
+      const badge = holding.usd_value != null
+        ? `<span class="badge priced">Currently Held</span>`
+        : `<span class="badge">No Price Data</span>`;
+
+      let rows = '';
+      rows += `<span class="desc">${description}</span>`;
+      rows += `<span class="rule"></span>`;
+      rows += `<span class="label">Amount held</span><span class="value">${fmtAmt(holding.amount)} ${sym}</span>`;
+      rows += `<span class="label">USD value</span><span class="value" style="font-weight:600">${usdDisplay}</span>`;
+      rows += `<span class="label">Price / token</span><span class="value">${priceDisplay}</span>`;
+      rows += `<span class="label">Mint address</span><span class="value" style="line-height:1.8">
+        <span style="word-break:break-all">${esc(holding.mint)}</span><br>
+        <button class="copy-btn" data-addr="${esc(holding.mint)}">Copy address</button>
+      </span>`;
+
+      document.getElementById('token-detail-name').innerHTML = `${sym}${badge}`;
+      document.getElementById('token-detail-grid').innerHTML = rows;
+      document.getElementById('token-detail').style.display  = 'block';
+    }
+  </script>
 </body>
 </html>

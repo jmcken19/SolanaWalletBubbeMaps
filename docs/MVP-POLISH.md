@@ -5,31 +5,28 @@ State after the 2026-11-24 cleanup, and what is left before showing it to people
 ## Done
 - One endpoint, `/api/wallet?address=`, returns holdings + activity. Each request stands alone,
   so two visitors never see each other's wallet (the old global cache mixed them up).
-- Threaded server (one slow wallet no longer blocks everyone), 60 s per-address cache.
-- Address checked (base58, 32-44 chars) on both sides; plain-language errors, shown to the user.
-- Helius key never reaches the browser: errors are generic, server logs mask the key.
+- Holdings come from one Helius DAS `searchAssets` call (SOL, tokens, names, prices for the
+  top ~10K tokens). Jupiter Price API v3 only prices what Helius doesn't; it uses
+  `api.jup.ag` when `JUPITER_API_KEY` is set, else the free `lite-api` host Jupiter is retiring.
+- Threaded server, 60 s per-address cache, `/healthz` for Render.
+- Address checked (base58, 32-44 chars) on both sides; plain errors shown to the user.
+- API keys never reach the browser and are masked in server logs.
 - Token names/symbols from chain metadata are escaped (they could carry HTML/script).
-- Token names fetched with one `getAssetBatch` call; prices fetched in chunks of 50 (no 414s).
-- UI copied from the salary repo's design system: near-black ground, Archivo + IBM Plex,
-  mono labels with the spectrum rule, orange `--signal` for data.
-- Holdings table (works without WebGL, on phones, with a keyboard) linked to the bubble map;
-  token panel with Solscan links; shareable `?address=` links; heatmap in UTC days, newest
-  weeks visible first on phones; reduced-motion respected.
-- Removed seven unused endpoints (`/run`, `/tokens`, `/token_detail`, `/summary`, `/trend`,
-  `/token_pnl`, `/prices`). The SQL/Postgres CLI (`main.py`, `runner.py`, `db.py`,
-  `queries.py`) is untouched and not used by the site.
+- Frontend bugs: click/resize listeners no longer pile up per search; heatmap uses UTC days
+  like the server; tooltip listeners attached once.
+- Colours and type from the salary repo's theme; layout, wording and features unchanged.
+- Removed seven endpoints the page never called. The Postgres CLI (`main.py`, `runner.py`,
+  `db.py`, `queries.py`) is untouched and not used by the site.
 
 ## Not verified yet
 - Live Helius + Jupiter calls (the cloud session that made these changes could not reach
-  them). Run locally with a real `HELIUS_API_KEY` before deploying.
-- Jupiter `lite-api.jup.ag/price/v3` is free but rate limited and may need an API key later.
+  them; tested against recorded response shapes). Run locally with real keys before deploying.
 
 ## Open questions (James)
-- Name, and whether it stays "Solana Tracker".
-- Who it's for and how it makes money (free tool for the channel? paid tiers? none?).
-- Hosting: keep Render (free tier sleeps), or move?
+- Rename the GitHub repo to `solana-wallet-bubble-map` (Settings > General > Repository name;
+  old links redirect). The Render URL is fixed when a service is created: a new service or a
+  custom domain is needed for a new URL.
+- Who it's for and how it makes money (see the product brainstorm in Studio-Repository
+  `ideas/bubble-map.md`).
 - Keep or delete the Postgres CLI and `DATABASE_URL`.
-- History depth: today 500 most recent transactions (`MAX_PAGES` in `config.py`). More costs
-  Helius credits and time per lookup.
-- Next features worth it for an MVP: PnL per token, wallet compare, holder bubble map for a
-  token (who holds a coin, Bubblemaps-style)?
+- History depth: last 500 transactions (`MAX_PAGES` in `config.py`). More costs credits and time.

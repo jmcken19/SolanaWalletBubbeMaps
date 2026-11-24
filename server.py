@@ -16,14 +16,9 @@ import time
 import traceback
 import urllib.request
 
-from config import API_KEY, PAGE_LIMIT, MAX_PAGES
+from config import API_KEY, JUPITER_API_KEY, PAGE_LIMIT, MAX_PAGES
 
 SOL_MINT = "So11111111111111111111111111111111111111112"
-TOKEN_PROGRAMS = (
-    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",   # SPL Token
-    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",   # Token-2022
-)
-PRICE_URL = "https://lite-api.jup.ag/price/v3?ids="
 PRICE_CHUNK = 50          # mints per price request (keeps the URL short)
 CACHE_TTL = 60            # seconds
 ADDRESS_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")   # base58, Solana address length
@@ -38,12 +33,12 @@ class UserError(Exception):
 
 # ── Upstream calls ───────────────────────────────────────────────────────────
 
-def _http_json(url, body=None, timeout=10):
+def _http_json(url, body=None, headers=None, timeout=10):
     data = json.dumps(body).encode() if body is not None else None
-    headers = {"User-Agent": "SolanaTracker/1.0"}
+    h = {"User-Agent": "SolanaWalletBubbleMap/1.0", **(headers or {})}
     if data is not None:
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers)
+        h["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=h)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read())
 
@@ -56,61 +51,69 @@ def _rpc(method, params):
     return out.get("result")
 
 
-def _prices(mints):
+def _jupiter_prices(mints):
+    """USD prices from Jupiter Price API v3. Best-effort: missing tokens just show "no price"."""
+    if JUPITER_API_KEY:
+        base, headers = "https://api.jup.ag/price/v3?ids=", {"x-api-key": JUPITER_API_KEY}
+    else:
+        base, headers = "https://lite-api.jup.ag/price/v3?ids=", {}   # free host, being retired
     prices = {}
     for i in range(0, len(mints), PRICE_CHUNK):
-        chunk = mints[i:i + PRICE_CHUNK]
         try:
-            raw = _http_json(PRICE_URL + ",".join(chunk), timeout=6)
+            raw = _http_json(base + ",".join(mints[i:i + PRICE_CHUNK]), headers=headers, timeout=6)
         except Exception:
-            continue   # prices are best-effort; tokens just show "no price"
+            continue
         for mint, info in (raw or {}).items():
             if info and info.get("usdPrice"):
                 prices[mint] = float(info["usdPrice"])
     return prices
 
 
-def _symbols(mints):
-    """Symbol and name for each mint via Helius DAS getAssetBatch (one call instead of one per token)."""
-    found = {}
-    for i in range(0, len(mints), 1000):
-        try:
-            assets = _rpc("getAssetBatch", {"ids": mints[i:i + 1000]}) or []
-        except Exception:
-            continue
-        for a in assets:
-            if not a:
-                continue
-            meta = (a.get("content") or {}).get("metadata") or {}
-            sym = (a.get("token_info") or {}).get("symbol") or meta.get("symbol")
-            if sym:
-                found[a["id"]] = {"symbol": sym.strip()[:16], "name": (meta.get("name") or "").strip()[:48]}
-    return found
-
-
 def get_holdings(wallet):
-    sol = float((_rpc("getBalance", [wallet]) or {}).get("value", 0)) / 1e9
+    """SOL + every fungible token in one Helius DAS searchAssets call (with names and, for the
+    top ~10K tokens, USD prices). Jupiter fills in prices Helius doesn't have."""
+    items, native = [], {}
+    for page in range(1, 6):   # up to 5,000 token accounts
+        res = _rpc("searchAssets", {
+            "ownerAddress": wallet, "tokenType": "fungible", "page": page, "limit": 1000,
+            "displayOptions": {"showNativeBalance": True},
+        }) or {}
+        native = res.get("nativeBalance") or native
+        batch = res.get("items") or []
+        items += batch
+        if len(batch) < 1000:
+            break
 
-    balances = collections.defaultdict(float)
-    for program_id in TOKEN_PROGRAMS:
-        res = _rpc("getTokenAccountsByOwner", [wallet, {"programId": program_id}, {"encoding": "jsonParsed"}])
-        for acct in (res or {}).get("value") or []:
-            info = acct["account"]["data"]["parsed"]["info"]
-            balances[info["mint"]] += float(info["tokenAmount"]["uiAmount"] or 0)
+    entries = [{
+        "mint": SOL_MINT, "symbol": "SOL", "name": "Solana",
+        "amount": float(native.get("lamports", 0)) / 1e9,
+        "price": native.get("price_per_sol"),
+    }]
+    for a in items:
+        ti = a.get("token_info") or {}
+        amount = float(ti.get("balance") or 0) / 10 ** int(ti.get("decimals") or 0)
+        if amount <= 0:
+            continue
+        meta = (a.get("content") or {}).get("metadata") or {}
+        sym = (ti.get("symbol") or meta.get("symbol") or "").strip()[:16]
+        entries.append({
+            "mint": a["id"],
+            "symbol": sym or a["id"][:4] + "\u2026" + a["id"][-4:],
+            "name": (meta.get("name") or "").strip()[:48],
+            "amount": amount,
+            "price": (ti.get("price_info") or {}).get("price_per_token"),
+        })
 
-    entries = [{"mint": SOL_MINT, "symbol": "SOL", "name": "Solana", "amount": sol}]
-    entries += [{"mint": m, "amount": a} for m, a in balances.items() if a > 0]
+    missing = [e["mint"] for e in entries if e["price"] is None]
+    if missing:
+        jup = _jupiter_prices(missing)
+        for e in entries:
+            if e["price"] is None:
+                e["price"] = jup.get(e["mint"])
 
-    meta = _symbols([e["mint"] for e in entries[1:]])
-    for e in entries[1:]:
-        m = meta.get(e["mint"], {})
-        e["symbol"] = m.get("symbol") or (e["mint"][:4] + "…" + e["mint"][-4:])
-        e["name"] = m.get("name", "")
-
-    price_map = _prices([e["mint"] for e in entries])
     holdings = []
     for e in entries:
-        price = price_map.get(e["mint"])
+        price = float(e.pop("price")) if e.get("price") is not None else None
         usd = e["amount"] * price if price is not None else None
         if usd is not None and usd < 0.01 and e["mint"] != SOL_MINT:
             continue   # confirmed dust
@@ -158,10 +161,11 @@ def wallet_report(wallet):
 
 
 def _log_error():
-    """Print the traceback with the API key masked (request URLs carry it)."""
+    """Print the traceback with API keys masked (request URLs carry it)."""
     text = traceback.format_exc()
-    if API_KEY:
-        text = text.replace(API_KEY, "***")
+    for secret in (API_KEY, JUPITER_API_KEY):
+        if secret:
+            text = text.replace(secret, "***")
     print(text, flush=True)
 
 
