@@ -7,4 +7,16 @@ From this
 
 Tech Stack: Python 3.x · Helius REST API + RPC · Jupiter Lite Price API · Three.js · requests
 
-Features: Paginates up to 500 transactions · Resolves mint addresses to readable symbols · Live wallet holdings via Helius RPC · Live USD prices via Jupiter · 3D bubble map of token holdings · 52-week trading activity heatmap · Clickable token detail panel · Stats: Total Value, SOL Balance, Token Balance
+Features: Live wallet holdings via Helius RPC · Token names via Helius DAS · Live USD prices via Jupiter · 3D bubble map of token holdings · Holdings table · 52-week trading activity heatmap (last 500 transactions) · Token detail panel · Shareable `?address=` links
+
+## Run locally
+
+```
+pip install -r requirements.txt
+echo HELIUS_API_KEY=your_key > .env
+python server.py        # http://localhost:5000
+```
+
+`server.py` is the web app (one JSON endpoint: `/api/wallet?address=`). `main.py` / `runner.py` are the original Postgres CLI and need `DATABASE_URL`; the site doesn't use them.
+
+MVP status and open questions: [docs/MVP-POLISH.md](docs/MVP-POLISH.md).
